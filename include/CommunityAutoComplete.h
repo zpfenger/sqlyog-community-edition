@@ -54,6 +54,8 @@ public:
 
     int FindTableIndex(const char* name);
 
+    int GetCompletionType(const char* text);
+
     static const int MAX_SUGGESTIONS = 100;
 
     volatile long m_loading;
@@ -65,6 +67,7 @@ private:
 
     std::vector<ACCompletionItem>    m_dynamic_items;
     std::vector<ACTableInfo>         m_tables;
+    TrieIndex                        m_trie_databases;
     TrieIndex                        m_trie_tables;
     TrieIndex                        m_trie_columns;
 

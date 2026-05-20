@@ -109,7 +109,7 @@ AutoCompleteInterface::HandlerOnWMChar(HWND hwnd, EditorBase *eb, WPARAM wparam)
 
     // Check stop characters
     {
-        char stop_chars[] = " ~`!@#$%^&*()+|\\=-?><,/\":;'{}[]";
+        char stop_chars[] = " ~`!@#$%^&*+|\\=-?><,/\":;'{}[]";
         char ch = (char)wparam;
         for(int i = 0; stop_chars[i]; i++)
         {
@@ -129,16 +129,20 @@ AutoCompleteInterface::HandlerOnWMChar(HWND hwnd, EditorBase *eb, WPARAM wparam)
         int table_idx = -1;
         SQLContextType ctx = m_community_ac->AnalyzeContext(eb, cursor_pos, prefix, table_idx);
 
-        if(prefix.GetLength() > 0)
+        // For CTX_INSERT_COLS, allow empty prefix (e.g. right after "(")
+        if(prefix.GetLength() > 0 || ctx == CTX_INSERT_COLS)
         {
+            const char* prefix_str = prefix.GetLength() > 0 ? prefix.GetString() : "";
+            int prefix_len = prefix.GetLength();
+
             wyString candidates;
             bool has_items = false;
-            m_community_ac->QueryCompletion(prefix.GetString(), ctx, table_idx, candidates, has_items);
+            m_community_ac->QueryCompletion(prefix_str, ctx, table_idx, candidates, has_items);
 
             if(has_items)
             {
                 SendMessage(hwnd, SCI_AUTOCSETTYPESEPARATOR, (WPARAM)'?', 0);
-                SendMessage(hwnd, SCI_AUTOCSHOW, prefix.GetLength(), (LPARAM)candidates.GetString());
+                SendMessage(hwnd, SCI_AUTOCSHOW, prefix_len, (LPARAM)candidates.GetString());
             }
             else
             {
@@ -305,6 +309,36 @@ AutoCompleteInterface::OnACNotification(WPARAM wparam, LPARAM lparam)
     // Community edition: handle auto-completion selection
     if(lparam && ((LPNMHDR)lparam)->code == SCN_AUTOCSELECTION)
     {
+        SCNotification* scn = (SCNotification*)lparam;
+
+        if(m_community_ac)
+        {
+            const char* selected = scn->text;
+            if(selected && selected[0])
+            {
+                int type_val = m_community_ac->GetCompletionType(selected);
+                HWND hwnd = ((LPNMHDR)lparam)->hwndFrom;
+
+                if(type_val == AC_PRE_FUNCTION)
+                {
+                    // Append () and place cursor inside
+                    int cur_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
+                    SendMessage(hwnd, SCI_INSERTTEXT, cur_pos, (LPARAM)"()");
+                    SendMessage(hwnd, SCI_SETCURRENTPOS, cur_pos + 1, 0);
+                    SendMessage(hwnd, SCI_SETSELECTIONSTART, cur_pos + 1, 0);
+                    SendMessage(hwnd, SCI_SETSELECTIONEND, cur_pos + 1, 0);
+                }
+                else if(type_val == AC_PRE_KEYWORD)
+                {
+                    // Append a space after keyword
+                    int cur_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
+                    SendMessage(hwnd, SCI_INSERTTEXT, cur_pos, (LPARAM)" ");
+                    SendMessage(hwnd, SCI_SETCURRENTPOS, cur_pos + 1, 0);
+                    SendMessage(hwnd, SCI_SETSELECTIONSTART, cur_pos + 1, 0);
+                    SendMessage(hwnd, SCI_SETSELECTIONEND, cur_pos + 1, 0);
+                }
+            }
+        }
         return wyTrue;
     }
 #endif

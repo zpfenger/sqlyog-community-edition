@@ -129,6 +129,31 @@ CCommunityAutoComplete::LoadMetadata(MDIWindow* wnd) {
 
     const char* dbname = wnd->m_conninfo.m_db.GetString();
 
+    // 0. Load database list
+    query.Sprintf("SHOW DATABASES");
+    myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
+                                wyFalse, wyFalse, wyTrue, true);
+    if (myres) {
+        while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
+            if (!row[0]) continue;
+
+            ACCompletionItem item;
+            memset(&item, 0, sizeof(item));
+            strncpy(item.text, row[0], sizeof(item.text) - 1);
+            item.type = AC_DATABASE;
+            item.priority = 0;
+            item.table_id = -1;
+
+            int idx = (int)m_static_items.size() + (int)m_dynamic_items.size();
+            m_dynamic_items.push_back(item);
+
+            wchar_t wname[128];
+            Utf8ToWide(row[0], wname, 128);
+            m_trie_databases.Insert(wname, idx);
+        }
+        wnd->m_tunnel->mysql_free_result(myres);
+    }
+
     // 1. Load table list
     query.Sprintf("SHOW TABLES FROM `%s`", dbname);
     myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
@@ -220,6 +245,7 @@ CCommunityAutoComplete::ClearDynamicMetadata() {
     EnterCriticalSection(&m_cs);
     m_dynamic_items.clear();
     m_tables.clear();
+    m_trie_databases.Clear();
     m_trie_tables.Clear();
     m_trie_columns.Clear();
     LeaveCriticalSection(&m_cs);
@@ -240,6 +266,7 @@ AsyncLoadThread(void* arg) {
     // Build new data into local containers
     std::vector<ACCompletionItem> new_items;
     std::vector<ACTableInfo> new_tables;
+    TrieIndex new_trie_databases;
     TrieIndex new_trie_tables;
     TrieIndex new_trie_columns;
 
@@ -250,6 +277,31 @@ AsyncLoadThread(void* arg) {
         MYSQL_RES* myres = NULL;
         MYSQL_ROW row;
         const char* dbname = wnd->m_conninfo.m_db.GetString();
+
+        // 0. Load database list
+        query.Sprintf("SHOW DATABASES");
+        myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
+                                    wyFalse, wyFalse, wyTrue, true);
+        if (myres) {
+            while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
+                if (!row[0]) continue;
+
+                ACCompletionItem item;
+                memset(&item, 0, sizeof(item));
+                strncpy(item.text, row[0], sizeof(item.text) - 1);
+                item.type = AC_DATABASE;
+                item.priority = 0;
+                item.table_id = -1;
+
+                int idx = static_count + (int)new_items.size();
+                new_items.push_back(item);
+
+                wchar_t wname[128];
+                CCommunityAutoComplete::Utf8ToWide(row[0], wname, 128);
+                new_trie_databases.Insert(wname, idx);
+            }
+            wnd->m_tunnel->mysql_free_result(myres);
+        }
 
         // 1. Load table list
         query.Sprintf("SHOW TABLES FROM `%s`", dbname);
@@ -339,6 +391,7 @@ AsyncLoadThread(void* arg) {
     EnterCriticalSection(&ac->m_cs);
     ac->m_dynamic_items.swap(new_items);
     ac->m_tables.swap(new_tables);
+    ac->m_trie_databases.Swap(new_trie_databases);
     ac->m_trie_tables.Swap(new_trie_tables);
     ac->m_trie_columns.Swap(new_trie_columns);
     LeaveCriticalSection(&ac->m_cs);
@@ -507,6 +560,83 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
         }
     }
 
+    // Check for INSERT INTO tablename ( pattern
+    {
+        char* p = line_text;
+        char* insert_pos = NULL;
+        while ((p = strstr(p, "INSERT")) != NULL) {
+            // Check word boundary
+            if (p > line_text) {
+                char before = *(p - 1);
+                if (before != ' ' && before != '\t' && before != '\n' && before != '\r') {
+                    p += 6;
+                    continue;
+                }
+            }
+            // Check case-insensitive: also match lowercase "insert"
+            char check[7];
+            strncpy(check, p, 6);
+            check[6] = '\0';
+            for (int ci = 0; check[ci]; ci++)
+                check[ci] = toupper((unsigned char)check[ci]);
+            if (strcmp(check, "INSERT") != 0) {
+                p += 6;
+                continue;
+            }
+            insert_pos = p;
+            p += 6;
+        }
+
+        if (insert_pos) {
+            char* into_pos = strstr(insert_pos, "INTO");
+            if (!into_pos) {
+                // Try lowercase
+                char* lower_into = strstr(insert_pos, "into");
+                if (lower_into) into_pos = lower_into;
+            }
+            // Try mixed case by scanning manually
+            if (!into_pos) {
+                char* scan = insert_pos + 6;
+                while (*scan) {
+                    if ((*scan == 'I' || *scan == 'i') &&
+                        (scan[1] == 'N' || scan[1] == 'n') &&
+                        (scan[2] == 'T' || scan[2] == 't') &&
+                        (scan[3] == 'O' || scan[3] == 'o')) {
+                        // Check word boundary before
+                        if (scan == insert_pos + 6 || scan[-1] == ' ' || scan[-1] == '\t') {
+                            into_pos = scan;
+                            break;
+                        }
+                    }
+                    scan++;
+                }
+            }
+
+            if (into_pos && into_pos > insert_pos) {
+                into_pos += 4;
+                while (*into_pos == ' ' || *into_pos == '\t') into_pos++;
+
+                // Extract table name
+                char ins_table[128] = {0};
+                int iti = 0;
+                while (*into_pos && *into_pos != ' ' && *into_pos != '\t' &&
+                       *into_pos != '(' && *into_pos != '\n' && iti < 127) {
+                    ins_table[iti++] = *into_pos++;
+                }
+                ins_table[iti] = '\0';
+
+                // Check if there's an opening parenthesis after table name
+                while (*into_pos == ' ' || *into_pos == '\t') into_pos++;
+                if (*into_pos == '(') {
+                    // We're inside INSERT INTO tablename ( - return CTX_INSERT_COLS
+                    table_idx = FindTableIndex(ins_table);
+                    delete[] line_text;
+                    return CTX_INSERT_COLS;
+                }
+            }
+        }
+    }
+
     delete[] line_text;
     return CTX_KEYWORD_FUNC;
 }
@@ -606,13 +736,37 @@ CCommunityAutoComplete::FindTableIndex(const char* name) {
     return -1;
 }
 
+int
+CCommunityAutoComplete::GetCompletionType(const char* text) {
+    if (!text || !text[0]) return 0;
+
+    // Search in static items
+    for (size_t i = 0; i < m_static_items.size(); i++) {
+        if (_stricmp(m_static_items[i].text, text) == 0)
+            return m_static_items[i].type;
+    }
+
+    // Search in dynamic items
+    EnterCriticalSection(&m_cs);
+    for (size_t i = 0; i < m_dynamic_items.size(); i++) {
+        if (_stricmp(m_dynamic_items[i].text, text) == 0) {
+            int type = m_dynamic_items[i].type;
+            LeaveCriticalSection(&m_cs);
+            return type;
+        }
+    }
+    LeaveCriticalSection(&m_cs);
+
+    return 0;
+}
+
 void
 CCommunityAutoComplete::QueryCompletion(const char* prefix, SQLContextType ctx, int table_idx,
                                          wyString& result, bool& has_items) {
     result.Clear();
     has_items = false;
 
-    if (!prefix || !prefix[0]) return;
+    if (!prefix || ((!prefix[0]) && ctx != CTX_INSERT_COLS)) return;
 
     wchar_t wprefix[128];
     Utf8ToWide(prefix, wprefix, 128);
@@ -621,7 +775,29 @@ CCommunityAutoComplete::QueryCompletion(const char* prefix, SQLContextType ctx, 
 
     switch (ctx) {
     case CTX_TABLE_REF:
-        m_trie_tables.PrefixSearch(wprefix, candidates, MAX_SUGGESTIONS);
+        {
+            std::vector<int> tmp;
+            m_trie_databases.PrefixSearch(wprefix, tmp, MAX_SUGGESTIONS / 2);
+            candidates.insert(candidates.end(), tmp.begin(), tmp.end());
+            m_trie_tables.PrefixSearch(wprefix, candidates, MAX_SUGGESTIONS / 2);
+        }
+        break;
+
+    case CTX_INSERT_COLS:
+        if (table_idx >= 0 && table_idx < (int)m_tables.size()) {
+            m_trie_columns.PrefixSearch(wprefix, candidates, MAX_SUGGESTIONS);
+            std::vector<int> filtered;
+            for (size_t i = 0; i < candidates.size(); i++) {
+                int idx = candidates[i];
+                int dyn_idx = idx - (int)m_static_items.size();
+                if (dyn_idx >= 0 && dyn_idx < (int)m_dynamic_items.size()) {
+                    if (m_dynamic_items[dyn_idx].table_id == table_idx) {
+                        filtered.push_back(idx);
+                    }
+                }
+            }
+            candidates = filtered;
+        }
         break;
 
     case CTX_COLUMN_REF:
