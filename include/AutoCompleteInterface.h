@@ -80,6 +80,14 @@ public:
 	*/
     wyInt32             HandlerOnWMKeyUp(HWND hwnd, EditorBase *eb, WPARAM wparam);
 
+    /// Manually trigger auto-completion at current cursor position (Ctrl+Space)
+    /**
+    @param hwnd     : IN HANDLE to the editor window
+    @param eb       : IN Pointer to editor base class object
+    @returns wyTrue if completion was shown, else wyFalse
+    */
+    wyBool              TriggerCompletion(HWND hwnd, EditorBase *eb);
+
 	/// Adds messages to message queue
 	/**
 	@param wnd		: IN Pointer to MDI class object

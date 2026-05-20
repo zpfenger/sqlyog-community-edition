@@ -87,7 +87,7 @@ AutoCompleteInterface::HandlerStoreObjects(MDIWindow *wnd, wyBool rebuild)
     }
 #else
     if(m_community_ac && wnd)
-        m_community_ac->LoadMetadata(wnd);
+        m_community_ac->LoadMetadataAsync(wnd);
 #endif
 }
 
@@ -152,13 +152,20 @@ AutoCompleteInterface::HandlerOnWMChar(HWND hwnd, EditorBase *eb, WPARAM wparam)
 #endif
 }
 
-wyInt32 
+wyInt32
 AutoCompleteInterface::HandlerOnWMKeyDown(HWND hwnd, EditorBase *eb, WPARAM wparam)
 {
 #ifndef COMMUNITY
     if(m_autocomplete)
     {
         return m_autocomplete->OnWMKeyDown(hwnd, eb, wparam);
+    }
+#else
+    // Community edition: intercept Ctrl+Space to trigger auto-completion
+    if(wparam == VK_SPACE && (GetKeyState(VK_CONTROL) & 0x8000))
+    {
+        TriggerCompletion(hwnd, eb);
+        return 1;
     }
 #endif
     return 0;
@@ -176,7 +183,38 @@ AutoCompleteInterface::HandlerOnWMKeyUp(HWND hwnd, EditorBase *eb, WPARAM wparam
     return 0;
 }
 
-wyBool 
+wyBool
+AutoCompleteInterface::TriggerCompletion(HWND hwnd, EditorBase *eb)
+{
+#ifndef COMMUNITY
+    return wyFalse;
+#else
+    if(!m_community_ac || !pGlobals || !pGlobals->m_isautocomplete)
+        return wyFalse;
+
+    int cursor_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
+    wyString prefix;
+    int table_idx = -1;
+    SQLContextType ctx = m_community_ac->AnalyzeContext(eb, cursor_pos, prefix, table_idx);
+
+    if(prefix.GetLength() > 0)
+    {
+        wyString candidates;
+        bool has_items = false;
+        m_community_ac->QueryCompletion(prefix.GetString(), ctx, table_idx, candidates, has_items);
+
+        if(has_items)
+        {
+            SendMessage(hwnd, SCI_AUTOCSETTYPESEPARATOR, (WPARAM)'?', 0);
+            SendMessage(hwnd, SCI_AUTOCSHOW, prefix.GetLength(), (LPARAM)candidates.GetString());
+            return wyTrue;
+        }
+    }
+    return wyFalse;
+#endif
+}
+
+wyBool
 AutoCompleteInterface::HandlerAddToMessageQueue(MDIWindow*	wnd, wyChar *query)
 {
 #ifndef COMMUNITY

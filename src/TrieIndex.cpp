@@ -73,6 +73,11 @@ void TrieIndex::Clear() {
     m_count = 0;
 }
 
+void TrieIndex::Swap(TrieIndex& other) {
+    std::swap(m_root, other.m_root);
+    std::swap(m_count, other.m_count);
+}
+
 void TrieIndex::FreeNode(TrieNode* node) {
     if (!node) return;
     for (auto it = node->children.begin(); it != node->children.end(); ++it) {

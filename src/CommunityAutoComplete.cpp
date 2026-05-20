@@ -25,12 +25,20 @@
 #include "SQLMaker.h"
 #include "sqlite3.h"
 #include <algorithm>
+#include <process.h>
 #include <string.h>
 
 CCommunityAutoComplete::CCommunityAutoComplete() {
+    InitializeCriticalSection(&m_cs);
+    m_loading = 0;
 }
 
 CCommunityAutoComplete::~CCommunityAutoComplete() {
+    // Wait for background loading to finish
+    while (InterlockedCompareExchange(&m_loading, 0, 0) != 0) {
+        Sleep(10);
+    }
+    DeleteCriticalSection(&m_cs);
 }
 
 void
@@ -209,10 +217,155 @@ CCommunityAutoComplete::LoadMetadata(MDIWindow* wnd) {
 
 void
 CCommunityAutoComplete::ClearDynamicMetadata() {
+    EnterCriticalSection(&m_cs);
     m_dynamic_items.clear();
     m_tables.clear();
     m_trie_tables.Clear();
     m_trie_columns.Clear();
+    LeaveCriticalSection(&m_cs);
+}
+
+// Background thread procedure for async metadata loading
+struct AsyncLoadParam {
+    CCommunityAutoComplete* ac;
+    MDIWindow* wnd;
+};
+
+unsigned __stdcall
+AsyncLoadThread(void* arg) {
+    AsyncLoadParam* param = (AsyncLoadParam*)arg;
+    CCommunityAutoComplete* ac = param->ac;
+    MDIWindow* wnd = param->wnd;
+
+    // Build new data into local containers
+    std::vector<ACCompletionItem> new_items;
+    std::vector<ACTableInfo> new_tables;
+    TrieIndex new_trie_tables;
+    TrieIndex new_trie_columns;
+
+    int static_count = (int)ac->m_static_items.size();
+
+    if (wnd && wnd->m_tunnel && wnd->m_mysql) {
+        wyString query;
+        MYSQL_RES* myres = NULL;
+        MYSQL_ROW row;
+        const char* dbname = wnd->m_conninfo.m_db.GetString();
+
+        // 1. Load table list
+        query.Sprintf("SHOW TABLES FROM `%s`", dbname);
+        myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
+                                    wyFalse, wyFalse, wyTrue, true);
+        if (myres) {
+            while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
+                if (!row[0]) continue;
+
+                ACCompletionItem item;
+                memset(&item, 0, sizeof(item));
+                strncpy(item.text, row[0], sizeof(item.text) - 1);
+                item.type = AC_TABLE;
+                item.priority = 3;
+                item.table_id = -1;
+
+                int idx = static_count + (int)new_items.size();
+                new_items.push_back(item);
+
+                ACTableInfo ti;
+                memset(&ti, 0, sizeof(ti));
+                strncpy(ti.name, row[0], sizeof(ti.name) - 1);
+                ti.alias[0] = '\0';
+                ti.field_start = -1;
+                ti.field_count = 0;
+                new_tables.push_back(ti);
+
+                wchar_t wname[128];
+                CCommunityAutoComplete::Utf8ToWide(row[0], wname, 128);
+                new_trie_tables.Insert(wname, idx);
+
+                if (new_tables.size() > 500)
+                    break;
+            }
+            wnd->m_tunnel->mysql_free_result(myres);
+        }
+
+        // 2. Load columns via INFORMATION_SCHEMA
+        query.Sprintf(
+            "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_SCHEMA = '%s' ORDER BY TABLE_NAME, ORDINAL_POSITION",
+            dbname);
+        myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
+                                    wyFalse, wyFalse, wyTrue, true);
+        if (myres) {
+            int last_table_id = -1;
+            while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
+                if (!row[0] || !row[1]) continue;
+
+                int t = -1;
+                for (size_t i = 0; i < new_tables.size(); i++) {
+                    if (strcmp(new_tables[i].name, row[0]) == 0) {
+                        t = (int)i;
+                        break;
+                    }
+                }
+                if (t < 0) continue;
+
+                if (t != last_table_id) {
+                    new_tables[t].field_start = (int)new_items.size();
+                    last_table_id = t;
+                }
+
+                ACCompletionItem item;
+                memset(&item, 0, sizeof(item));
+                strncpy(item.text, row[1], sizeof(item.text) - 1);
+                item.type = AC_COLUMN;
+                item.priority = 4;
+                item.table_id = t;
+
+                int idx = static_count + (int)new_items.size();
+                new_items.push_back(item);
+                new_tables[t].field_count++;
+
+                wchar_t wname[128];
+                CCommunityAutoComplete::Utf8ToWide(row[1], wname, 128);
+                new_trie_columns.Insert(wname, idx);
+
+                if (new_items.size() > 10000)
+                    break;
+            }
+            wnd->m_tunnel->mysql_free_result(myres);
+        }
+    }
+
+    // Swap under lock
+    EnterCriticalSection(&ac->m_cs);
+    ac->m_dynamic_items.swap(new_items);
+    ac->m_tables.swap(new_tables);
+    ac->m_trie_tables.Swap(new_trie_tables);
+    ac->m_trie_columns.Swap(new_trie_columns);
+    LeaveCriticalSection(&ac->m_cs);
+
+    InterlockedExchange(&ac->m_loading, 0);
+
+    delete param;
+    return 0;
+}
+
+void
+CCommunityAutoComplete::LoadMetadataAsync(MDIWindow* wnd) {
+    if (!wnd) return;
+    if (InterlockedCompareExchange(&m_loading, 1, 0) != 0)
+        return; // Already loading
+
+    AsyncLoadParam* param = new AsyncLoadParam;
+    param->ac = this;
+    param->wnd = wnd;
+
+    HANDLE hThread = (HANDLE)_beginthreadex(NULL, 0, AsyncLoadThread, param, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
+    } else {
+        InterlockedExchange(&m_loading, 0);
+        delete param;
+    }
 }
 
 SQLContextType
@@ -514,6 +667,45 @@ CCommunityAutoComplete::QueryCompletion(const char* prefix, SQLContextType ctx, 
     }
 
     if (candidates.empty()) return;
+
+    // Sort: exact match first, then by priority, then alphabetically
+    std::sort(candidates.begin(), candidates.end(),
+        [&](int a, int b) {
+            ACCompletionItem* ia = NULL;
+            ACCompletionItem* ib = NULL;
+
+            if (a < (int)m_static_items.size())
+                ia = &m_static_items[a];
+            else {
+                int d = a - (int)m_static_items.size();
+                if (d < (int)m_dynamic_items.size())
+                    ia = &m_dynamic_items[d];
+            }
+
+            if (b < (int)m_static_items.size())
+                ib = &m_static_items[b];
+            else {
+                int d = b - (int)m_static_items.size();
+                if (d < (int)m_dynamic_items.size())
+                    ib = &m_dynamic_items[d];
+            }
+
+            if (!ia && !ib) return false;
+            if (!ia) return false;
+            if (!ib) return true;
+
+            // Exact match first
+            int exact_a = (_stricmp(ia->text, prefix) == 0) ? 0 : 1;
+            int exact_b = (_stricmp(ib->text, prefix) == 0) ? 0 : 1;
+            if (exact_a != exact_b) return exact_a < exact_b;
+
+            // Then by priority
+            if (ia->priority != ib->priority)
+                return ia->priority < ib->priority;
+
+            // Then alphabetically
+            return _stricmp(ia->text, ib->text) < 0;
+        });
 
     // Format results for Scintilla SCI_AUTOCSHOW: "item?type\n"
     for (size_t i = 0; i < candidates.size() && i < (size_t)MAX_SUGGESTIONS; i++) {

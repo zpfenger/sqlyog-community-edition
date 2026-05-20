@@ -40,6 +40,8 @@ public:
 
     void LoadMetadata(MDIWindow* wnd);
 
+    void LoadMetadataAsync(MDIWindow* wnd);
+
     void ClearDynamicMetadata();
 
     void QueryCompletion(const char* prefix, SQLContextType ctx, int table_idx,
@@ -54,6 +56,8 @@ public:
 
     static const int MAX_SUGGESTIONS = 100;
 
+    volatile long m_loading;
+
 private:
     std::vector<ACCompletionItem>    m_static_items;
     TrieIndex                        m_trie_keywords;
@@ -64,8 +68,12 @@ private:
     TrieIndex                        m_trie_tables;
     TrieIndex                        m_trie_columns;
 
+    CRITICAL_SECTION                 m_cs;
+
     static void WideToUtf8(const wchar_t* wide, char* utf8, int utf8_size);
     static void Utf8ToWide(const char* utf8, wchar_t* wide, int wide_size);
+
+    friend unsigned __stdcall AsyncLoadThread(void* arg);
 };
 
 #endif // _COMMUNITY_AUTO_COMPLETE_H_

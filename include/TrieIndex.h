@@ -25,6 +25,8 @@ public:
 
     void Clear();
 
+    void Swap(TrieIndex& other);
+
     int GetCount() const { return m_count; }
 
 private:
