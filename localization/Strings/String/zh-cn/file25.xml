@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="3629">打开会话保存点...	Ctrl+Shift+O</string>
+	<string name="3630">保存会话...	Ctrl+Shift+S</string>
+	<string name="3631">会话保存为...</string>
+	<string name="3632">结束会话	Ctrl+Shift+X</string>
+	<string name="3633">在创建会话保存点的备份</string>
+	<string name="3634">注意：如果你想复制到不同主机，连接到多个主机，请用文件 -> 新连接。目标连接下拉菜单会列出所有连接。</string>
+	<string name="3635">连接</string>
+	<string name="3636">要保存当前会话吗？</string>
+	<string name="3637">购买</string>
+	<string name="3638">试用</string>
+	<string name="3639">天试用离开</string>
+	<string name="3640">天试用离开</string>
+	<string name="3641">与复制关联的触发器</string>
+	<string name="3642">你是否想保存当前布局？</string>
+	<string name="3643">保存选项</string>
+	<string name="3644">保存当前布局到任务文件中以作以后使用。</string>
+	<string name="3645">您希望在保存当前配置到作业文件后运行，还是不保存就运行？</string>
+	<string name="3646">指定作业文件：</string>
+	<string name="3647">虚拟    </string>
+	<string name="3648">表达    </string>
+	<string name="3649">高级选项</string>
+	<string name="3650">含时间戳的前缀</string>
+	<string name="3651">每个对象的文件</string>
+	<string name="3652">使用LOAD LOCAL导入&amp;XML数据…… 	Ctrl+Shift+X</string>
+	<string name="3653">选择表格和列在XML中导入</string>
+	<string name="3654">行标识方式：</string>
+	</resources>

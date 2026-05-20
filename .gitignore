@@ -1,0 +1,38 @@
+# Build outputs
+bin/
+build/*.txt
+build/*.txt.err
+build/*.user
+build/*.cd
+
+# MSBuild intermediates
+*.recipe
+build/x64/
+build/win32/
+
+# Compiled objects
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+
+# Executables
+*.exe
+*.dll
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+ipch/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+.serena/
