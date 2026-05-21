@@ -275,6 +275,7 @@ wyBool
 L10n::InitDialog(HWND hwnd)
 {
     wyInt32     i, j, sel = -1, locsel = -1, versionold = 0, versionnew = 0;
+    wyBool      hassavedlanguage = wyFalse;
     wyWChar     directory[MAX_PATH];
     wyWChar*    lpfileport = NULL;
     wyString    temp, section, langcode, country;
@@ -295,6 +296,11 @@ L10n::InitDialog(HWND hwnd)
     {
         temp.SetAs(directory);
         wyIni::IniGetString("UserInterface", "Language", "", &langcode, temp.GetString());
+        hassavedlanguage = langcode.GetLength() != 0;
+        if(hassavedlanguage == wyFalse)
+        {
+            langcode.SetAs("zh-cn");
+        }
         versionold = wyIni::IniGetInt("UserInterface", "Version", 0, temp.GetString());
     }
 
@@ -343,6 +349,11 @@ L10n::InitDialog(HWND hwnd)
     {
         if(sel != -1 && versionnew <= versionold)
         {
+            return wyFalse;
+        }
+        else if(hassavedlanguage == wyFalse && sel != -1)
+        {
+            InitL10n(langcode.GetString(), m_dbname, wyTrue);
             return wyFalse;
         }
         else if(locsel == -1)

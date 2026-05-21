@@ -165,7 +165,12 @@ FrameWindow::FrameWindow(HINSTANCE hinstance)
 		m_topromptonimplicit = wyIni::IniGetInt(GENERALPREFA, "PromptinTransaction", 1, dirstr.GetString())? wyTrue: wyFalse;
 		m_topromptonclose = wyIni::IniGetInt(GENERALPREFA, "PromptinTransactionClose", 1, dirstr.GetString())? wyTrue: wyFalse;
 #endif
-        wyIni::IniGetString("UserInterface", "Language", "en", &section, dirstr.GetString());
+        wyIni::IniGetString("UserInterface", "Language", "", &section, dirstr.GetString());
+        if(section.GetLength() == 0)
+        {
+            section.SetAs("zh-cn");
+            wyIni::IniWriteString("UserInterface", "Language", section.GetString(), dirstr.GetString());
+        }
         count = GetModuleFileName(NULL, directory, MAX_PATH - 1);
 	    directory[count - pGlobals->m_modulenamelength] = '\0';
         dirstr.SetAs(directory);
