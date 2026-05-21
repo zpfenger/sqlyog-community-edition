@@ -34,6 +34,44 @@ bool CommunityAllowsEmptyPrefix(SQLContextType ctx) {
            ctx == CTX_INSERT_COLS;
 }
 
+bool IsCommunityStopChar(char ch) {
+    const char* stop_chars = "~`!@#$%^&*+|\\=-?><,/\":;'{}[]";
+    for (int i = 0; stop_chars[i]; i++) {
+        if (ch == stop_chars[i])
+            return true;
+    }
+    return false;
+}
+
+wyBool ShowCommunityCompletion(CCommunityAutoComplete* ac, HWND hwnd, EditorBase* eb) {
+    if(!ac || !hwnd || !eb || !pGlobals || !pGlobals->m_isautocomplete)
+        return wyFalse;
+
+    int cursor_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
+    wyString prefix;
+    int table_idx = -1;
+    SQLContextType ctx = ac->AnalyzeContext(eb, cursor_pos, prefix, table_idx);
+
+    if(prefix.GetLength() <= 0 && !CommunityAllowsEmptyPrefix(ctx))
+        return wyFalse;
+
+    const char* prefix_str = prefix.GetLength() > 0 ? prefix.GetString() : "";
+    int prefix_len = prefix.GetLength();
+
+    wyString candidates;
+    bool has_items = false;
+    ac->QueryCompletion(prefix_str, ctx, table_idx, candidates, has_items);
+
+    if(!has_items) {
+        SendMessage(hwnd, SCI_AUTOCCANCEL, 0, 0);
+        return wyFalse;
+    }
+
+    SendMessage(hwnd, SCI_AUTOCSETTYPESEPARATOR, (WPARAM)'?', 0);
+    SendMessage(hwnd, SCI_AUTOCSHOW, prefix_len, (LPARAM)candidates.GetString());
+    return wyTrue;
+}
+
 }
 #endif
 
@@ -124,48 +162,10 @@ AutoCompleteInterface::HandlerOnWMChar(HWND hwnd, EditorBase *eb, WPARAM wparam)
 
     // Check stop characters
     {
-        // Keep whitespace flowing into context analysis so `FROM ` / `SELECT ` can
-        // trigger empty-prefix suggestions instead of being cancelled early.
-        char stop_chars[] = "~`!@#$%^&*+|\\=-?><,/\":;'{}[]";
-        char ch = (char)wparam;
-        for(int i = 0; stop_chars[i]; i++)
-        {
-            if(ch == stop_chars[i])
-            {
-                SendMessage(hwnd, SCI_AUTOCCANCEL, 0, 0);
-                eb->SetAutoIndentation(hwnd, wparam);
-                return 0;
-            }
-        }
-    }
-
-    // Analyze context and query completion
-    {
-        int cursor_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
-        wyString prefix;
-        int table_idx = -1;
-        SQLContextType ctx = m_community_ac->AnalyzeContext(eb, cursor_pos, prefix, table_idx);
-
-        // For CTX_INSERT_COLS, allow empty prefix (e.g. right after "(")
-        if(prefix.GetLength() > 0 || CommunityAllowsEmptyPrefix(ctx))
-        {
-            const char* prefix_str = prefix.GetLength() > 0 ? prefix.GetString() : "";
-            int prefix_len = prefix.GetLength();
-
-            wyString candidates;
-            bool has_items = false;
-            m_community_ac->QueryCompletion(prefix_str, ctx, table_idx, candidates, has_items);
-
-            if(has_items)
-            {
-                SendMessage(hwnd, SCI_AUTOCSETTYPESEPARATOR, (WPARAM)'?', 0);
-                SendMessage(hwnd, SCI_AUTOCSHOW, prefix_len, (LPARAM)candidates.GetString());
-            }
-            else
-            {
-                SendMessage(hwnd, SCI_AUTOCCANCEL, 0, 0);
-            }
-        }
+        // Keep whitespace and '.' flowing through so completion can run after
+        // Scintilla inserts the new character and context reflects the real text.
+        if(IsCommunityStopChar((char)wparam))
+            SendMessage(hwnd, SCI_AUTOCCANCEL, 0, 0);
     }
 
     eb->SetAutoIndentation(hwnd, wparam);
@@ -213,27 +213,7 @@ AutoCompleteInterface::TriggerCompletion(HWND hwnd, EditorBase *eb)
     if(!m_community_ac || !pGlobals || !pGlobals->m_isautocomplete)
         return wyFalse;
 
-    int cursor_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
-    wyString prefix;
-    int table_idx = -1;
-    SQLContextType ctx = m_community_ac->AnalyzeContext(eb, cursor_pos, prefix, table_idx);
-
-    if(prefix.GetLength() > 0 || CommunityAllowsEmptyPrefix(ctx))
-    {
-        wyString candidates;
-        bool has_items = false;
-        const char* prefix_str = prefix.GetLength() > 0 ? prefix.GetString() : "";
-        m_community_ac->QueryCompletion(prefix_str, ctx, table_idx, candidates, has_items);
-
-        if(has_items)
-        {
-            int prefix_len = prefix.GetLength();
-            SendMessage(hwnd, SCI_AUTOCSETTYPESEPARATOR, (WPARAM)'?', 0);
-            SendMessage(hwnd, SCI_AUTOCSHOW, prefix_len, (LPARAM)candidates.GetString());
-            return wyTrue;
-        }
-    }
-    return wyFalse;
+    return ShowCommunityCompletion(m_community_ac, hwnd, eb);
 #endif
 }
 
@@ -325,40 +305,55 @@ AutoCompleteInterface::OnACNotification(WPARAM wparam, LPARAM lparam)
         }
     }
 #else
-    // Community edition: handle auto-completion selection
-    if(lparam && ((LPNMHDR)lparam)->code == SCN_AUTOCSELECTION)
+    if(lparam)
     {
         SCNotification* scn = (SCNotification*)lparam;
+        HWND hwnd = ((LPNMHDR)lparam)->hwndFrom;
 
-        if(m_community_ac)
+        if(((LPNMHDR)lparam)->code == SCN_CHARADDED)
         {
-            const char* selected = scn->text;
-            if(selected && selected[0])
+            if(IsCommunityStopChar((char)scn->ch))
             {
-                int type_val = m_community_ac->GetCompletionType(selected);
-                HWND hwnd = ((LPNMHDR)lparam)->hwndFrom;
+                SendMessage(hwnd, SCI_AUTOCCANCEL, 0, 0);
+                return wyFalse;
+            }
 
-                if(type_val == AC_PRE_FUNCTION)
+            EditorBase* eb = (EditorBase*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+            ShowCommunityCompletion(m_community_ac, hwnd, eb);
+            return wyFalse;
+        }
+
+        if(((LPNMHDR)lparam)->code == SCN_AUTOCSELECTION)
+        {
+            if(m_community_ac)
+            {
+                const char* selected = scn->text;
+                if(selected && selected[0])
                 {
-                    // Append () and place cursor inside
-                    int cur_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
-                    SendMessage(hwnd, SCI_INSERTTEXT, cur_pos, (LPARAM)"()");
-                    SendMessage(hwnd, SCI_SETCURRENTPOS, cur_pos + 1, 0);
-                    SendMessage(hwnd, SCI_SETSELECTIONSTART, cur_pos + 1, 0);
-                    SendMessage(hwnd, SCI_SETSELECTIONEND, cur_pos + 1, 0);
-                }
-                else if(type_val == AC_PRE_KEYWORD)
-                {
-                    // Append a space after keyword
-                    int cur_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
-                    SendMessage(hwnd, SCI_INSERTTEXT, cur_pos, (LPARAM)" ");
-                    SendMessage(hwnd, SCI_SETCURRENTPOS, cur_pos + 1, 0);
-                    SendMessage(hwnd, SCI_SETSELECTIONSTART, cur_pos + 1, 0);
-                    SendMessage(hwnd, SCI_SETSELECTIONEND, cur_pos + 1, 0);
+                    int type_val = m_community_ac->GetCompletionType(selected);
+
+                    if(type_val == AC_PRE_FUNCTION)
+                    {
+                        // Append () and place cursor inside
+                        int cur_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
+                        SendMessage(hwnd, SCI_INSERTTEXT, cur_pos, (LPARAM)"()");
+                        SendMessage(hwnd, SCI_SETCURRENTPOS, cur_pos + 1, 0);
+                        SendMessage(hwnd, SCI_SETSELECTIONSTART, cur_pos + 1, 0);
+                        SendMessage(hwnd, SCI_SETSELECTIONEND, cur_pos + 1, 0);
+                    }
+                    else if(type_val == AC_PRE_KEYWORD)
+                    {
+                        // Append a space after keyword
+                        int cur_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
+                        SendMessage(hwnd, SCI_INSERTTEXT, cur_pos, (LPARAM)" ");
+                        SendMessage(hwnd, SCI_SETCURRENTPOS, cur_pos + 1, 0);
+                        SendMessage(hwnd, SCI_SETSELECTIONSTART, cur_pos + 1, 0);
+                        SendMessage(hwnd, SCI_SETSELECTIONEND, cur_pos + 1, 0);
+                    }
                 }
             }
+            return wyTrue;
         }
-        return wyTrue;
     }
 #endif
     return wyFalse;

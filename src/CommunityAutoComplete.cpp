@@ -851,35 +851,47 @@ CCommunityAutoComplete::QueryCompletion(const char* prefix, SQLContextType ctx, 
 
     case CTX_INSERT_COLS:
         if (table_idx >= 0 && table_idx < (int)m_tables.size()) {
-            m_trie_columns.PrefixSearch(wprefix, candidates, MAX_SUGGESTIONS);
-            std::vector<int> filtered;
-            for (size_t i = 0; i < candidates.size(); i++) {
-                int idx = candidates[i];
-                int dyn_idx = idx - (int)m_static_items.size();
-                if (dyn_idx >= 0 && dyn_idx < (int)m_dynamic_items.size()) {
-                    if (m_dynamic_items[dyn_idx].table_id == table_idx) {
-                        filtered.push_back(idx);
-                    }
+            const ACTableInfo& table = m_tables[table_idx];
+            int prefix_len = (int)strlen(prefix);
+
+            if (table.field_start >= 0 && table.field_count > 0) {
+                for (int i = 0; i < table.field_count; i++) {
+                    int dyn_idx = table.field_start + i;
+                    if (dyn_idx < 0 || dyn_idx >= (int)m_dynamic_items.size())
+                        continue;
+
+                    ACCompletionItem& item = m_dynamic_items[dyn_idx];
+                    if (prefix_len > 0 && _strnicmp(item.text, prefix, prefix_len) != 0)
+                        continue;
+
+                    candidates.push_back((int)m_static_items.size() + dyn_idx);
+                    if (MAX_SUGGESTIONS > 0 && (int)candidates.size() >= MAX_SUGGESTIONS)
+                        break;
                 }
             }
-            candidates = filtered;
         }
         break;
 
     case CTX_COLUMN_REF:
         if (table_idx >= 0 && table_idx < (int)m_tables.size()) {
-            m_trie_columns.PrefixSearch(wprefix, candidates, MAX_SUGGESTIONS);
-            std::vector<int> filtered;
-            for (size_t i = 0; i < candidates.size(); i++) {
-                int idx = candidates[i];
-                int dyn_idx = idx - (int)m_static_items.size();
-                if (dyn_idx >= 0 && dyn_idx < (int)m_dynamic_items.size()) {
-                    if (m_dynamic_items[dyn_idx].table_id == table_idx) {
-                        filtered.push_back(idx);
-                    }
+            const ACTableInfo& table = m_tables[table_idx];
+            int prefix_len = (int)strlen(prefix);
+
+            if (table.field_start >= 0 && table.field_count > 0) {
+                for (int i = 0; i < table.field_count; i++) {
+                    int dyn_idx = table.field_start + i;
+                    if (dyn_idx < 0 || dyn_idx >= (int)m_dynamic_items.size())
+                        continue;
+
+                    ACCompletionItem& item = m_dynamic_items[dyn_idx];
+                    if (prefix_len > 0 && _strnicmp(item.text, prefix, prefix_len) != 0)
+                        continue;
+
+                    candidates.push_back((int)m_static_items.size() + dyn_idx);
+                    if (MAX_SUGGESTIONS > 0 && (int)candidates.size() >= MAX_SUGGESTIONS)
+                        break;
                 }
             }
-            candidates = filtered;
         }
         break;
 
