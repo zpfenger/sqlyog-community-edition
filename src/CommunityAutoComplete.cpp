@@ -28,6 +28,60 @@
 #include <process.h>
 #include <string.h>
 
+namespace {
+
+bool AllowEmptyPrefix(SQLContextType ctx) {
+    return ctx == CTX_TABLE_REF ||
+           ctx == CTX_COLUMN_REF ||
+           ctx == CTX_WHERE_EXPR ||
+           ctx == CTX_INSERT_COLS;
+}
+
+const char* GetActiveDatabaseName(MDIWindow* wnd) {
+    if (!wnd)
+        return "";
+
+    if (wnd->m_database.GetLength() > 0)
+        return wnd->m_database.GetString();
+
+    if (wnd->m_conninfo.m_db.GetLength() > 0)
+        return wnd->m_conninfo.m_db.GetString();
+
+    return "";
+}
+
+bool IsTableContextKeyword(const char* word) {
+    return strcmp(word, "FROM") == 0 ||
+           strcmp(word, "JOIN") == 0 ||
+           strcmp(word, "INNER") == 0 ||
+           strcmp(word, "LEFT") == 0 ||
+           strcmp(word, "RIGHT") == 0 ||
+           strcmp(word, "CROSS") == 0 ||
+           strcmp(word, "INTO") == 0 ||
+           strcmp(word, "UPDATE") == 0 ||
+           strcmp(word, "TABLE") == 0;
+}
+
+bool IsExprContextKeyword(const char* word) {
+    return strcmp(word, "WHERE") == 0 ||
+           strcmp(word, "ON") == 0 ||
+           strcmp(word, "HAVING") == 0 ||
+           strcmp(word, "AND") == 0 ||
+           strcmp(word, "OR") == 0 ||
+           strcmp(word, "NOT") == 0 ||
+           strcmp(word, "SET") == 0 ||
+           strcmp(word, "GROUP") == 0 ||
+           strcmp(word, "ORDER") == 0 ||
+           strcmp(word, "BY") == 0 ||
+           strcmp(word, "LIKE") == 0 ||
+           strcmp(word, "BETWEEN") == 0 ||
+           strcmp(word, "IN") == 0 ||
+           strcmp(word, "VALUES") == 0 ||
+           strcmp(word, "SELECT") == 0;
+}
+
+}
+
 CCommunityAutoComplete::CCommunityAutoComplete() {
     InitializeCriticalSection(&m_cs);
     m_loading = 0;
@@ -127,7 +181,7 @@ CCommunityAutoComplete::LoadMetadata(MDIWindow* wnd) {
     MYSQL_RES* myres = NULL;
     MYSQL_ROW row;
 
-    const char* dbname = wnd->m_conninfo.m_db.GetString();
+    const char* dbname = GetActiveDatabaseName(wnd);
 
     // 0. Load database list
     query.Sprintf("SHOW DATABASES");
@@ -278,7 +332,7 @@ AsyncLoadThread(void* arg) {
         wyString query;
         MYSQL_RES* myres = NULL;
         MYSQL_ROW row;
-        const char* dbname = wnd->m_conninfo.m_db.GetString();
+        const char* dbname = GetActiveDatabaseName(wnd);
 
         // 0. Load database list
         query.Sprintf("SHOW DATABASES");
@@ -305,87 +359,89 @@ AsyncLoadThread(void* arg) {
             wnd->m_tunnel->mysql_free_result(myres);
         }
 
-        // 1. Load table list
-        query.Sprintf("SHOW TABLES FROM `%s`", dbname);
-        myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
-                                    wyFalse, wyFalse, wyTrue, true);
-        if (myres) {
-            while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
-                if (!row[0]) continue;
+        if (dbname && dbname[0]) {
+            // 1. Load table list
+            query.Sprintf("SHOW TABLES FROM `%s`", dbname);
+            myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
+                                        wyFalse, wyFalse, wyTrue, true);
+            if (myres) {
+                while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
+                    if (!row[0]) continue;
 
-                ACCompletionItem item;
-                memset(&item, 0, sizeof(item));
-                strncpy(item.text, row[0], sizeof(item.text) - 1);
-                item.type = AC_TABLE;
-                item.priority = 3;
-                item.table_id = -1;
+                    ACCompletionItem item;
+                    memset(&item, 0, sizeof(item));
+                    strncpy(item.text, row[0], sizeof(item.text) - 1);
+                    item.type = AC_TABLE;
+                    item.priority = 3;
+                    item.table_id = -1;
 
-                int idx = static_count + (int)new_items.size();
-                new_items.push_back(item);
+                    int idx = static_count + (int)new_items.size();
+                    new_items.push_back(item);
 
-                ACTableInfo ti;
-                memset(&ti, 0, sizeof(ti));
-                strncpy(ti.name, row[0], sizeof(ti.name) - 1);
-                ti.alias[0] = '\0';
-                ti.field_start = -1;
-                ti.field_count = 0;
-                new_tables.push_back(ti);
+                    ACTableInfo ti;
+                    memset(&ti, 0, sizeof(ti));
+                    strncpy(ti.name, row[0], sizeof(ti.name) - 1);
+                    ti.alias[0] = '\0';
+                    ti.field_start = -1;
+                    ti.field_count = 0;
+                    new_tables.push_back(ti);
 
-                wchar_t wname[128];
-                CCommunityAutoComplete::Utf8ToWide(row[0], wname, 128);
-                new_trie_tables.Insert(wname, idx);
+                    wchar_t wname[128];
+                    CCommunityAutoComplete::Utf8ToWide(row[0], wname, 128);
+                    new_trie_tables.Insert(wname, idx);
 
-                if (new_tables.size() > 500)
-                    break;
-            }
-            wnd->m_tunnel->mysql_free_result(myres);
-        }
-
-        // 2. Load columns via INFORMATION_SCHEMA
-        query.Sprintf(
-            "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
-            "WHERE TABLE_SCHEMA = '%s' ORDER BY TABLE_NAME, ORDINAL_POSITION",
-            dbname);
-        myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
-                                    wyFalse, wyFalse, wyTrue, true);
-        if (myres) {
-            int last_table_id = -1;
-            while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
-                if (!row[0] || !row[1]) continue;
-
-                int t = -1;
-                for (size_t i = 0; i < new_tables.size(); i++) {
-                    if (strcmp(new_tables[i].name, row[0]) == 0) {
-                        t = (int)i;
+                    if (new_tables.size() > 500)
                         break;
-                    }
                 }
-                if (t < 0) continue;
-
-                if (t != last_table_id) {
-                    new_tables[t].field_start = (int)new_items.size();
-                    last_table_id = t;
-                }
-
-                ACCompletionItem item;
-                memset(&item, 0, sizeof(item));
-                strncpy(item.text, row[1], sizeof(item.text) - 1);
-                item.type = AC_COLUMN;
-                item.priority = 4;
-                item.table_id = t;
-
-                int idx = static_count + (int)new_items.size();
-                new_items.push_back(item);
-                new_tables[t].field_count++;
-
-                wchar_t wname[128];
-                CCommunityAutoComplete::Utf8ToWide(row[1], wname, 128);
-                new_trie_columns.Insert(wname, idx);
-
-                if (new_items.size() > 10000)
-                    break;
+                wnd->m_tunnel->mysql_free_result(myres);
             }
-            wnd->m_tunnel->mysql_free_result(myres);
+
+            // 2. Load columns via INFORMATION_SCHEMA
+            query.Sprintf(
+                "SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA = '%s' ORDER BY TABLE_NAME, ORDINAL_POSITION",
+                dbname);
+            myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
+                                        wyFalse, wyFalse, wyTrue, true);
+            if (myres) {
+                int last_table_id = -1;
+                while ((row = wnd->m_tunnel->mysql_fetch_row(myres))) {
+                    if (!row[0] || !row[1]) continue;
+
+                    int t = -1;
+                    for (size_t i = 0; i < new_tables.size(); i++) {
+                        if (strcmp(new_tables[i].name, row[0]) == 0) {
+                            t = (int)i;
+                            break;
+                        }
+                    }
+                    if (t < 0) continue;
+
+                    if (t != last_table_id) {
+                        new_tables[t].field_start = (int)new_items.size();
+                        last_table_id = t;
+                    }
+
+                    ACCompletionItem item;
+                    memset(&item, 0, sizeof(item));
+                    strncpy(item.text, row[1], sizeof(item.text) - 1);
+                    item.type = AC_COLUMN;
+                    item.priority = 4;
+                    item.table_id = t;
+
+                    int idx = static_count + (int)new_items.size();
+                    new_items.push_back(item);
+                    new_tables[t].field_count++;
+
+                    wchar_t wname[128];
+                    CCommunityAutoComplete::Utf8ToWide(row[1], wname, 128);
+                    new_trie_columns.Insert(wname, idx);
+
+                    if (new_items.size() > 10000)
+                        break;
+                }
+                wnd->m_tunnel->mysql_free_result(myres);
+            }
         }
     }
 
@@ -447,6 +503,8 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
     SendMessage(hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&tr);
 
     // Extract prefix (current word before cursor)
+    bool cursor_after_space = (line_text[text_len - 1] == ' ' || line_text[text_len - 1] == '\t');
+
     int i = text_len - 1;
     while (i >= 0 && (line_text[i] == ' ' || line_text[i] == '\t')) i--;
 
@@ -475,6 +533,8 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
     if (word_len > 0 && word_len < (int)sizeof(word)) {
         strncpy(word, line_text + word_start, word_len);
         word[word_len] = '\0';
+
+        ExtractAliases(line_text);
 
         char* dot = strchr(word, '.');
         if (dot) {
@@ -530,33 +590,35 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
                 prev_word[k] -= 32;
         }
 
-        if (strcmp(prev_word, "FROM") == 0 ||
-            strcmp(prev_word, "JOIN") == 0 ||
-            strcmp(prev_word, "INNER") == 0 ||
-            strcmp(prev_word, "LEFT") == 0 ||
-            strcmp(prev_word, "RIGHT") == 0 ||
-            strcmp(prev_word, "CROSS") == 0 ||
-            strcmp(prev_word, "INTO") == 0 ||
-            strcmp(prev_word, "UPDATE") == 0 ||
-            strcmp(prev_word, "TABLE") == 0) {
+        if (cursor_after_space) {
+            char current_word[128] = {0};
+            int copy_len = min(word_len, (int)sizeof(current_word) - 1);
+            strncpy(current_word, word, copy_len);
+            current_word[copy_len] = '\0';
+            for (int k = 0; current_word[k]; k++) {
+                if (current_word[k] >= 'a' && current_word[k] <= 'z')
+                    current_word[k] -= 32;
+            }
+
+            if (IsTableContextKeyword(current_word)) {
+                prefix.Clear();
+                delete[] line_text;
+                return CTX_TABLE_REF;
+            }
+
+            if (IsExprContextKeyword(current_word)) {
+                prefix.Clear();
+                delete[] line_text;
+                return CTX_WHERE_EXPR;
+            }
+        }
+
+        if (IsTableContextKeyword(prev_word)) {
             delete[] line_text;
             return CTX_TABLE_REF;
         }
 
-        if (strcmp(prev_word, "WHERE") == 0 ||
-            strcmp(prev_word, "ON") == 0 ||
-            strcmp(prev_word, "HAVING") == 0 ||
-            strcmp(prev_word, "AND") == 0 ||
-            strcmp(prev_word, "OR") == 0 ||
-            strcmp(prev_word, "NOT") == 0 ||
-            strcmp(prev_word, "SET") == 0 ||
-            strcmp(prev_word, "GROUP") == 0 ||
-            strcmp(prev_word, "ORDER") == 0 ||
-            strcmp(prev_word, "BY") == 0 ||
-            strcmp(prev_word, "LIKE") == 0 ||
-            strcmp(prev_word, "BETWEEN") == 0 ||
-            strcmp(prev_word, "IN") == 0 ||
-            strcmp(prev_word, "VALUES") == 0) {
+        if (IsExprContextKeyword(prev_word)) {
             delete[] line_text;
             return CTX_WHERE_EXPR;
         }
@@ -768,7 +830,7 @@ CCommunityAutoComplete::QueryCompletion(const char* prefix, SQLContextType ctx, 
     result.Clear();
     has_items = false;
 
-    if (!prefix || ((!prefix[0]) && ctx != CTX_INSERT_COLS)) return;
+    if (!prefix || ((!prefix[0]) && AllowEmptyPrefix(ctx) == false)) return;
 
     wchar_t wprefix[128];
     Utf8ToWide(prefix, wprefix, 128);

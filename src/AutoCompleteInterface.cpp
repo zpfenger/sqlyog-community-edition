@@ -24,6 +24,17 @@
 #else
 #include "CommunityAutoComplete.h"
 #include "scintilla/Scintilla.h"
+
+namespace {
+
+bool CommunityAllowsEmptyPrefix(SQLContextType ctx) {
+    return ctx == CTX_TABLE_REF ||
+           ctx == CTX_COLUMN_REF ||
+           ctx == CTX_WHERE_EXPR ||
+           ctx == CTX_INSERT_COLS;
+}
+
+}
 #endif
 
 AutoCompleteInterface::AutoCompleteInterface()
@@ -113,7 +124,9 @@ AutoCompleteInterface::HandlerOnWMChar(HWND hwnd, EditorBase *eb, WPARAM wparam)
 
     // Check stop characters
     {
-        char stop_chars[] = " ~`!@#$%^&*+|\\=-?><,/\":;'{}[]";
+        // Keep whitespace flowing into context analysis so `FROM ` / `SELECT ` can
+        // trigger empty-prefix suggestions instead of being cancelled early.
+        char stop_chars[] = "~`!@#$%^&*+|\\=-?><,/\":;'{}[]";
         char ch = (char)wparam;
         for(int i = 0; stop_chars[i]; i++)
         {
@@ -134,7 +147,7 @@ AutoCompleteInterface::HandlerOnWMChar(HWND hwnd, EditorBase *eb, WPARAM wparam)
         SQLContextType ctx = m_community_ac->AnalyzeContext(eb, cursor_pos, prefix, table_idx);
 
         // For CTX_INSERT_COLS, allow empty prefix (e.g. right after "(")
-        if(prefix.GetLength() > 0 || ctx == CTX_INSERT_COLS)
+        if(prefix.GetLength() > 0 || CommunityAllowsEmptyPrefix(ctx))
         {
             const char* prefix_str = prefix.GetLength() > 0 ? prefix.GetString() : "";
             int prefix_len = prefix.GetLength();
@@ -205,16 +218,18 @@ AutoCompleteInterface::TriggerCompletion(HWND hwnd, EditorBase *eb)
     int table_idx = -1;
     SQLContextType ctx = m_community_ac->AnalyzeContext(eb, cursor_pos, prefix, table_idx);
 
-    if(prefix.GetLength() > 0)
+    if(prefix.GetLength() > 0 || CommunityAllowsEmptyPrefix(ctx))
     {
         wyString candidates;
         bool has_items = false;
-        m_community_ac->QueryCompletion(prefix.GetString(), ctx, table_idx, candidates, has_items);
+        const char* prefix_str = prefix.GetLength() > 0 ? prefix.GetString() : "";
+        m_community_ac->QueryCompletion(prefix_str, ctx, table_idx, candidates, has_items);
 
         if(has_items)
         {
+            int prefix_len = prefix.GetLength();
             SendMessage(hwnd, SCI_AUTOCSETTYPESEPARATOR, (WPARAM)'?', 0);
-            SendMessage(hwnd, SCI_AUTOCSHOW, prefix.GetLength(), (LPARAM)candidates.GetString());
+            SendMessage(hwnd, SCI_AUTOCSHOW, prefix_len, (LPARAM)candidates.GetString());
             return wyTrue;
         }
     }

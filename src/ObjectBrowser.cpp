@@ -6034,7 +6034,9 @@ CQueryObject::SyncObjectDB(MDIWindow* wnd)
             wnd->m_tunnel->mysql_free_result(res);
 
 		wnd->m_database.SetAs(m_seldatabase.GetString());
+        wnd->m_conninfo.m_db.SetAs(m_seldatabase.GetString());
 	    pGlobals->m_pcmainwin->AddTextInCombo(m_seldatabase.GetAsWideChar());
+        wnd->m_acinterface->HandlerStoreObjects(wnd, wyTrue);
 	} 
 	
 	return wyTrue;
@@ -6057,7 +6059,9 @@ CQueryObject::SyncObjectDBNocombo(MDIWindow* wnd)
             wnd->m_tunnel->mysql_free_result(res);
 
 		wnd->m_database.SetAs(m_seldatabase.GetString());
+        wnd->m_conninfo.m_db.SetAs(m_seldatabase.GetString());
 	    //pGlobals->m_pcmainwin->AddTextInCombo(m_seldatabase.GetAsWideChar());
+        wnd->m_acinterface->HandlerStoreObjects(wnd, wyTrue);
 	} 
 	
 	return wyTrue;

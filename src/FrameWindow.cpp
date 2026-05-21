@@ -4084,6 +4084,7 @@ FrameWindow::OnToolComboSelChange()
 	pcquerywnd->m_tunnel->SetDB(dbname.GetString());
 
 	pcquerywnd->m_database.Sprintf("%s", dbname.GetString());
+    pcquerywnd->m_conninfo.m_db.SetAs(dbname.GetString());
 	pGlobals->m_lastdatabase.SetAs(db);
 
 	SendMessage(m_hwndtoolcombo, CB_SETCURSEL,(WPARAM)index, 0);
@@ -4092,6 +4093,7 @@ FrameWindow::OnToolComboSelChange()
 
 	//selecting new database in to the object browser
 	pcquerywnd->m_pcqueryobject->OnComboChanged(db);
+    pcquerywnd->m_acinterface->HandlerStoreObjects(pcquerywnd, wyTrue);
 
 	return wyTrue;
 }
@@ -4357,6 +4359,7 @@ FrameWindow::ChangeDBInCombo(Tunnel * tunnel, PMYSQL mysql, wyWChar * db)
 	MDIWindow*      pcquerywnd;
 	wyString		dbname(db);
 	wyString		myrowstr;
+    wyBool          reloadmetadata = wyFalse;
 
 	VERIFY(pcquerywnd = GetActiveWin());
 	
@@ -4377,8 +4380,10 @@ FrameWindow::ChangeDBInCombo(Tunnel * tunnel, PMYSQL mysql, wyWChar * db)
 		AddTextInCombo(myrowstr.GetAsWideChar());
 		pcquerywnd->m_pcqueryobject->OnComboChanged(myrowstr.GetAsWideChar());
 		pcquerywnd->m_database.Sprintf("%s", myrowstr.GetString());
+        pcquerywnd->m_conninfo.m_db.SetAs(myrowstr.GetString());
 		// Also copy it in the the temporary buffer so that we can select it when a new mySQLyog window is selected.
 		pGlobals->m_lastdatabase.SetAs(myrow[0], IsMySQL41(tunnel, mysql));
+        reloadmetadata = wyTrue;
 	} 
     else 
 		AddTextInCombo(NODBSELECTED);
@@ -4388,11 +4393,15 @@ FrameWindow::ChangeDBInCombo(Tunnel * tunnel, PMYSQL mysql, wyWChar * db)
 		AddTextInCombo(db);
 		pcquerywnd->m_pcqueryobject->OnComboChanged(db);
 		pcquerywnd->m_database.Sprintf("%s", dbname.GetString());
+        pcquerywnd->m_conninfo.m_db.SetAs(dbname.GetString());
 		pGlobals->m_lastdatabase.SetAs(db);
 		tunnel->SetDB(dbname.GetString());
+        reloadmetadata = wyTrue;
 	}
 
 	tunnel->mysql_free_result(myres);
+    if(reloadmetadata == wyTrue)
+        pcquerywnd->m_acinterface->HandlerStoreObjects(pcquerywnd, wyTrue);
 	return wyTrue;
 }
 

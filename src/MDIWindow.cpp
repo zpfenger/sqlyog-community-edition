@@ -443,6 +443,7 @@ MDIWindow::SelectDefaultDatabase()
 		pGlobals->m_pcmainwin->AddTextInCombo(token);
 		pGlobals->m_lastdatabase.SetAs(token);
 		m_database.SetAs(token);
+		m_conninfo.m_db.SetAs(tokenstr.GetString());
 		m_tunnel->SetDB(tokenstr.GetString());
         free(tempdb);
 	}
