@@ -86,8 +86,12 @@ AutoCompleteInterface::HandlerStoreObjects(MDIWindow *wnd, wyBool rebuild)
         StoreObjects(wnd, m_autocomplete, rebuild);
     }
 #else
+    // P0-FIX: 改为同步加载。原异步实现违反两条 mysql 客户端规则：
+    //   1) 后台线程未调用 mysql_thread_init()/mysql_thread_end()
+    //   2) 与主线程共享同一个 mysql 连接（libmysql 单连接非线程安全）
+    // 同步在主线程执行 LoadMetadata 在连接刚建立时是安全的（此时无其他 mysql 操作）。
     if(m_community_ac && wnd)
-        m_community_ac->LoadMetadataAsync(wnd);
+        m_community_ac->LoadMetadata(wnd);
 #endif
 }
 

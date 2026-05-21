@@ -154,7 +154,8 @@ CCommunityAutoComplete::LoadMetadata(MDIWindow* wnd) {
         wnd->m_tunnel->mysql_free_result(myres);
     }
 
-    // 1. Load table list
+    // 1. Load table list (仅当 dbname 有效时执行)
+    if (dbname && dbname[0]) {
     query.Sprintf("SHOW TABLES FROM `%s`", dbname);
     myres = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query,
                                 wyFalse, wyFalse, wyTrue, true);
@@ -238,6 +239,7 @@ CCommunityAutoComplete::LoadMetadata(MDIWindow* wnd) {
         }
         wnd->m_tunnel->mysql_free_result(myres);
     }
+    } // end if (dbname && dbname[0])
 }
 
 void
@@ -779,7 +781,9 @@ CCommunityAutoComplete::QueryCompletion(const char* prefix, SQLContextType ctx, 
             std::vector<int> tmp;
             m_trie_databases.PrefixSearch(wprefix, tmp, MAX_SUGGESTIONS / 2);
             candidates.insert(candidates.end(), tmp.begin(), tmp.end());
-            m_trie_tables.PrefixSearch(wprefix, candidates, MAX_SUGGESTIONS / 2);
+            // P0-FIX: 不能直接把 candidates 传入 PrefixSearch，因为它内部会 results.clear()
+            m_trie_tables.PrefixSearch(wprefix, tmp, MAX_SUGGESTIONS / 2);
+            candidates.insert(candidates.end(), tmp.begin(), tmp.end());
         }
         break;
 
