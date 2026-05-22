@@ -239,7 +239,8 @@ CCommunityAutoComplete::LoadMetadata(MDIWindow* wnd) {
             Utf8ToWide(row[0], wname, 128);
             m_trie_tables.Insert(wname, idx);
 
-            if (m_tables.size() > 500)
+            // [Community] Raised limit from 500 to 2000 — some databases have 600+ tables
+            if (m_tables.size() > 2000)
                 break;
         }
         wnd->m_tunnel->mysql_free_result(myres);
@@ -288,7 +289,8 @@ CCommunityAutoComplete::LoadMetadata(MDIWindow* wnd) {
             Utf8ToWide(row[1], wname, 128);
             m_trie_columns.Insert(wname, idx);
 
-            if (m_dynamic_items.size() > 10000)
+            // [Community] Raised limit from 10000 to 50000 — large schemas have 16000+ columns
+            if (m_dynamic_items.size() > 50000)
                 break;
         }
         wnd->m_tunnel->mysql_free_result(myres);
@@ -390,7 +392,8 @@ AsyncLoadThread(void* arg) {
                     CCommunityAutoComplete::Utf8ToWide(row[0], wname, 128);
                     new_trie_tables.Insert(wname, idx);
 
-                    if (new_tables.size() > 500)
+                    // [Community] Raised limit from 500 to 2000 — some databases have 600+ tables
+                    if (new_tables.size() > 2000)
                         break;
                 }
                 wnd->m_tunnel->mysql_free_result(myres);
@@ -437,7 +440,8 @@ AsyncLoadThread(void* arg) {
                     CCommunityAutoComplete::Utf8ToWide(row[1], wname, 128);
                     new_trie_columns.Insert(wname, idx);
 
-                    if (new_items.size() > 10000)
+                    // [Community] Raised limit from 10000 to 50000 — large schemas have 16000+ columns
+                    if (new_items.size() > 50000)
                         break;
                 }
                 wnd->m_tunnel->mysql_free_result(myres);
