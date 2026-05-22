@@ -1755,18 +1755,16 @@ TabModule::Resize(wyBool issetredraw)
 		SendMessage(m_hwnd, WM_SETREDRAW, FALSE, NULL);
 
 #ifdef COMMUNITY
-	wyInt32 headvpos = 0;
-	
-	headvpos = vpos;
-    headht = 20;
-	// [Community] Disabled: skip if community ribbon is not created
+	// [Community] Only reserve space if community ribbon is created
 	if(m_hwndcommtytitle)
 	{
+		wyInt32 headvpos = vpos;
+		headht = 20;
 		VERIFY(MoveWindow(m_hwndcommtytitle, hpos, headvpos, width, headht, TRUE));
 		InvalidateRect(m_hwndcommtytitle, NULL, TRUE);
 		UpdateWindow(m_hwndcommtytitle);
+		height = height - 20;
 	}
-	height = height - 20;
 	
 #endif
 

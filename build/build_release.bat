@@ -60,6 +60,15 @@ copy /Y "..\localization\Tools\libpcre-0.dll" "%OUT_DIR%\" >nul
 :: Keywords database (SQL syntax highlighting)
 copy /Y "..\lib\Keywords.db" "%OUT_DIR%\" >nul
 
+:: L10n translation database (localization: zh-cn, ja, ko, en)
+if not exist "..\localization\bin\L10n.db" (
+    echo Compiling L10n.db from XML translation files...
+    cd /d "..\localization"
+    call compile.bat
+    cd /d "..\build"
+)
+copy /Y "..\localization\bin\L10n.db" "%OUT_DIR%\" >nul
+
 :: Create empty sqlyog.ini
 echo. > "%OUT_DIR%\sqlyog.ini"
 
