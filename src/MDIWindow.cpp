@@ -733,8 +733,9 @@ MDIWindow::WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 
 //Community ribbon hyper link
 #ifdef COMMUNITY  
-	if((HIWORD(wparam) == STN_CLICKED)&&(LOWORD(wparam) == IDC_COMMTITLE))
-	    ShellExecute(NULL, L"open", TEXT(BUYURL_TOOLBARRIBBON), NULL, NULL, SW_SHOWNORMAL);
+	// [Community] Disabled: clicking community ribbon ad opens buy page
+	//if((HIWORD(wparam) == STN_CLICKED)&&(LOWORD(wparam) == IDC_COMMTITLE))
+	//    ShellExecute(NULL, L"open", TEXT(BUYURL_TOOLBARRIBBON), NULL, NULL, SW_SHOWNORMAL);
 #endif
 
 	return DefMDIChildProc(hwnd, message, wparam, lparam);

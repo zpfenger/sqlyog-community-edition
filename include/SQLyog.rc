@@ -315,10 +315,11 @@ BEGIN
         MENUITEM "Collapse All in Object Browser\tShift+{-}", IDM_COLLAPSEOBJECT
         MENUITEM SEPARATOR
         MENUITEM "Create &Database...\tCtrl+D", IDM_CREATEDATABASE
-        MENUITEM "New Data Searc&h\tCtrl+Shift+D", ID_DATASEARCH
+        // [Community] Disabled: ENT-only feature menus
+        //MENUITEM "New Data Searc&h\tCtrl+Shift+D", ID_DATASEARCH
         MENUITEM SEPARATOR
-        MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
-        MENUITEM "&Import External Data...\tCtrl+Alt+O", ID_IMPORT_EXTERNAL_DATA
+        //MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
+        //MENUITEM "&Import External Data...\tCtrl+Alt+O", ID_IMPORT_EXTERNAL_DATA
         MENUITEM "&Execute SQL Script...\tCtrl+Shift+Q", ID_IMEX_TEXTFILE2
         MENUITEM SEPARATOR
         MENUITEM "Change Objec&t Browser Color...", IDM_OBCOLOR
@@ -456,9 +457,10 @@ BEGIN
     BEGIN
         MENUITEM "Create &Table\tF4",           ID_TABLE_MAKER
         MENUITEM "&Copy Table(s) To Different Host/Database...", ID_OPEN_COPYTABLE
-        MENUITEM "New Data Searc&h\tCtrl+Shift+D", ID_DATASEARCH
+        // [Community] Disabled: ENT-only feature menus
+        //MENUITEM "New Data Searc&h\tCtrl+Shift+D", ID_DATASEARCH
         MENUITEM SEPARATOR
-        MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
+        //MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
         MENUITEM "&Backup Table(s) As SQL Dump...\tCtrl+Alt+E", ID_IMPORTEXPORT_TABLESEXPORTTABLES
     END
 END
@@ -471,9 +473,10 @@ BEGIN
         MENUITEM "New &Connection...\tCtrl+M",  IDM_FILE_NEWCONNECTION
         MENUITEM SEPARATOR
         MENUITEM "New &Query Editor\tCtrl+T",   ID_NEW_EDITOR
-        MENUITEM "New Query &Builder\tCtrl+K",  ID_QUERYBUILDER
-        MENUITEM "Ne&w Schema Designer\tCtrl+Alt+D", ID_SCHEMADESIGNER
-        MENUITEM "New Data Searc&h\tCtrl+Shift+D", ID_DATASEARCH
+        // [Community] Disabled: ENT-only features
+        //MENUITEM "New Query &Builder\tCtrl+K",  ID_QUERYBUILDER
+        //MENUITEM "Ne&w Schema Designer\tCtrl+Alt+D", ID_SCHEMADESIGNER
+        //MENUITEM "New Data Searc&h\tCtrl+Shift+D", ID_DATASEARCH
         MENUITEM SEPARATOR
         MENUITEM "Close &Tab\tAlt+L",           ID_FILE_CLOSETAB
         MENUITEM "&Rename Tab\tAlt+F2",         ID_FILE_RENAMETAB
@@ -514,12 +517,13 @@ BEGIN
             MENUITEM "EXPLAIN EXTENDED <Query>",    ID_EXPLAIN_EXTENDED
         END
         MENUITEM SEPARATOR
-        POPUP "S&QL Formatter"
-        BEGIN
-            MENUITEM "Format &Current Query\tF12",  ACCEL_FORMATCURRENTQUERY
-            MENUITEM "Format &Selected Query\tCtrl+F12", ACCEL_FORMATSELECTEDQUERY
-            MENUITEM "Format &All Queries\tShift+F12", ACCEL_FORMATALLQUERIES
-        END
+        // [Community] Disabled: ENT-only SQL Formatter
+        //POPUP "S&QL Formatter"
+        //BEGIN
+        //    MENUITEM "Format &Current Query\tF12",  ACCEL_FORMATCURRENTQUERY
+        //    MENUITEM "Format &Selected Query\tCtrl+F12", ACCEL_FORMATSELECTEDQUERY
+        //    MENUITEM "Format &All Queries\tShift+F12", ACCEL_FORMATALLQUERIES
+        //END
         MENUITEM "&Insert Templates...\tCtrl+Shift+T", ID_EDIT_INSERTTEMPLATES
         MENUITEM SEPARATOR
         MENUITEM "&Undo\tCtrl+Z",               IDM_EDIT_UNDO
@@ -586,12 +590,14 @@ BEGIN
         MENUITEM SEPARATOR
         POPUP "&Backup/Export"
         BEGIN
-            MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
+            // [Community] Disabled: ENT-only Scheduled Backups
+            //MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
             MENUITEM "&Backup Database As SQL Dump...\tCtrl+Alt+E", 40214
         END
         POPUP "&Import "
         BEGIN
-            MENUITEM "Import E&xternal Data...\tCtrl+Alt+O", ID_IMPORT_EXTERNAL_DATA
+            // [Community] Disabled: ENT-only Import External Data
+            //MENUITEM "Import E&xternal Data...\tCtrl+Alt+O", ID_IMPORT_EXTERNAL_DATA
             MENUITEM "&Execute SQL Script...\tCtrl+Shift+Q", 40047
         END
         MENUITEM SEPARATOR
@@ -630,13 +636,15 @@ BEGIN
         MENUITEM SEPARATOR
         POPUP "&Backup/Export"
         BEGIN
-            MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
+            // [Community] Disabled: ENT-only Scheduled Backups
+            //MENUITEM "&Scheduled Backups...\tCtrl+Alt+S", ID_POWERTOOLS_SCHEDULEEXPORT2
             MENUITEM "&Backup Table(s) As SQL Dump...\tCtrl+Alt+E", ID_IMPORTEXPORT_TABLESEXPORTTABLES
             MENUITEM "&Export Table Data As...\tCtrl+Alt+C", 40377
         END
         POPUP "&Import "
         BEGIN
-            MENUITEM "Import E&xternal Data...\tCtrl+Alt+O", ID_IMPORT_EXTERNAL_DATA
+            // [Community] Disabled: ENT-only Import External Data
+            //MENUITEM "Import E&xternal Data...\tCtrl+Alt+O", ID_IMPORT_EXTERNAL_DATA
             MENUITEM "&Import CSV Data Using LOAD LOCAL...\tCtrl+Shift+M", ID_IMPORT_FROMCSV
             MENUITEM "Import &XML Data Using LOAD LOCAL...\tCtrl+Shift+X", ID_IMPORT_FROMXML
         END
@@ -726,6 +734,8 @@ BEGIN
         END
         MENUITEM "&Preferences...",             IDC_PREF
     END
+    // [Community] Disabled: entire Powertools menu is ENT-only
+    /*
     POPUP "&Powertools"
     BEGIN
         MENUITEM "Database S&ynchronization Wizard...\tCtrl+Alt+W", IDM_DATASYNC
@@ -740,6 +750,9 @@ BEGIN
         MENUITEM SEPARATOR
         MENUITEM "&Rebuild tags",               ID_REBUILDTAGS
     END
+    */
+    // [Community] Disabled: entire Transactions menu is ENT-only
+    /*
     POPUP "T&ransactions"
     BEGIN
         MENUITEM "Set Autocommit",              ID_TRANSACTION_SETAUTOCOMMIT, CHECKED
@@ -791,6 +804,7 @@ BEGIN
             MENUITEM "Release Savepoint",           ID_SAVEPOINT_RELEASESAVEPOINT
         END
     END
+    */
     POPUP "&Window"
     BEGIN
         MENUITEM "&Cascade",                    IDM_WINDOW_CASCADE
@@ -801,7 +815,8 @@ BEGIN
     BEGIN
         MENUITEM "&Help\tF1",                   IDM_HELP_HELP
         MENUITEM "&Keyboard Shortcuts...",      IDM_HELP_SHORT
-        MENUITEM "Check For &Updates...",       IDM_HELP_CHKUPGRD
+        // [Community] Disabled: Check For Updates menu item
+        //MENUITEM "Check For &Updates...",       IDM_HELP_CHKUPGRD
         MENUITEM "&About...",                   IDM_HELP_ABOUT
     END
 END
@@ -830,9 +845,10 @@ BEGIN
     POPUP "Tab Menu"
     BEGIN
         MENUITEM "New &Query Editor\tCtrl+T",   ID_NEW_EDITOR
-        MENUITEM "New Query &Builder\tCtrl+K",  ID_QUERYBUILDER
-        MENUITEM "Ne&w Schema Designer\tCtrl+Alt+D", ID_SCHEMADESIGNER
-        MENUITEM "New Data Sea&rch\tCtrl+Shift+D", ID_DATASEARCH
+        // [Community] Disabled: ENT-only features
+        //MENUITEM "New Query &Builder\tCtrl+K",  ID_QUERYBUILDER
+        //MENUITEM "Ne&w Schema Designer\tCtrl+Alt+D", ID_SCHEMADESIGNER
+        //MENUITEM "New Data Sea&rch\tCtrl+Shift+D", ID_DATASEARCH
         MENUITEM SEPARATOR
         MENUITEM "&History\tCtrl+Shift+H",      ID_HISTORY
         MENUITEM "&Info\tCtrl+Shift+I",         ID_INFOTAB
@@ -1784,8 +1800,9 @@ EXSTYLE WS_EX_NOPARENTNOTIFY | WS_EX_CONTROLPARENT
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     CONTROL         IDB_COMSPLASH,IDC_COMLINK,"Static",SS_BITMAP | SS_NOTIFY | WS_GROUP | WS_TABSTOP,0,0,391,324
-    PUSHBUTTON      "&Continue...",IDCONTINUE,263,328,61,14
-    PUSHBUTTON      "&Buy",IDC_BUY_LINK,328,328,60,14
+    PUSHBUTTON      "&Continue...",IDCONTINUE,328,328,61,14
+    // [Community] Disabled: Buy button on splash screen
+    //PUSHBUTTON      "&Buy",IDC_BUY_LINK,328,328,60,14
 END
 
 IDD_CREATEDB DIALOGEX 0, 0, 265, 121
@@ -1821,6 +1838,8 @@ BEGIN
     DEFPUSHBUTTON   "&OK",ID_OK,231,183,50,16
 END
 
+// [Community] Disabled: Get Enterprise/Ultimate dialog
+/*
 IDD_GETSQLYOGENTERPRISE DIALOGEX 0, 0, 328, 74
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Get SQLyog ENTERPRISE/ULTIMATE"
@@ -1832,7 +1851,10 @@ BEGIN
     ICON            IDI_MAIN,IDC_LOGO,5,10,21,20
     DEFPUSHBUTTON   "&Buy Now",IDC_BUYNOW,273,54,50,14
 END
+*/
 
+// [Community] Disabled: upgrade check dialog
+/*
 IDD_UPGRADECHK DIALOGEX 0, 0, 267, 58
 STYLE DS_ABSALIGN | DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Check for updates"
@@ -1844,6 +1866,7 @@ BEGIN
     ICON            IDI_MYSQL,IDC_LOGO,4,5,20,20
     PUSHBUTTON      "Go to &Download page",IDC_DOWNLOAD,128,43,81,12
 END
+*/
 
 IDD_PREFOTHERS DIALOGEX 0, 0, 255, 291
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION
@@ -2022,6 +2045,8 @@ BEGIN
     CONTROL         "",IDC_STATIC,"Static",SS_BLACKFRAME | SS_SUNKEN,10,188,204,1
 END
 
+// [Community] Disabled: Get Ultimate dialog
+/*
 IDD_GETSQLYOGULTIMATE DIALOGEX 0, 0, 236, 78
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Get SQLyog ULTIMATE"
@@ -2033,6 +2058,7 @@ BEGIN
     ICON            IDI_MAIN,IDC_LOGO,7,10,21,20
     DEFPUSHBUTTON   "&Buy Now",IDC_BUYNOW,182,60,50,14
 END
+*/
 
 IDD_OBCOLOR DIALOGEX 0, 0, 196, 106
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
@@ -3223,7 +3249,8 @@ PROGRESS                GIF                     "bitmaps\\progress.gif"
 STRINGTABLE
 BEGIN
     IDM_FILE_CONNECT        "Template"
-    IDS_NAGENT              "\nUpgrade to the ""Fully Loaded"" SQLyog that includes Advanced Connectivity Tools, Synchronization Tools, Smart Autocomplete, Migration Toolkit, Scheduled Backups, Notification Services and much more. Click here to learn more about SQLyog"
+    // [Community] Disabled: upgrade nag text
+    IDS_NAGENT              ""
     IDM_FILE_NEWCONNECTION  " Create a new connection"
     IDM_FILE_CLOSECONNECTION " Close the current MDI and connection"
     IDM_FILE_CLOASEALL      " Close all MDI window and connections"
@@ -3683,7 +3710,7 @@ BEGIN
     ID_OBJECT_UPDATESTMT    " Create a valid SQL UPDATE statement for the table"
     ID_OBJECT_DELETESTMT    " Create a valid SQL DELETE statement for the table"
     IDS_DSYNCTYPETITLE      " How do you want to perform synchronization?"
-    IDS_DSYNCTYPESUBTITLE   " Why upgrade to Ultimate? Scheduled Jobs allows you to schedule important jobs like backups, data sync, etc"
+    IDS_DSYNCTYPESUBTITLE   ""
     IDM_EDIT_TEMP_ALTERDB   "/*\r\nAlter Database Statement\r\nSource : MySQL documentation\r\n*/\r\nALTER DATABASE db_name\r\n   [DEFAULT] CHARACTER SET charset_name\r\n | [DEFAULT] COLLATE collation_name"
 END
 

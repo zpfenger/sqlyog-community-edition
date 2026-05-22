@@ -160,8 +160,9 @@ HandleClickButton(const wchar_t* buttontext, BEHAVIOR_EVENT_PARAMS& params)
                 }                
             }
         }
-#else		
-		pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
+#else
+		// [Community] Disabled: no upgrade prompt
+		//pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
 		return TRUE;
 #endif
 	}

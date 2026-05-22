@@ -73,8 +73,9 @@ struct TREEVIEWDATA
 };
 
 
-#define COMMMUNITY_POWERTOOLS _(L"Power Tools Options (Ultimate only) ")
-#define COMMUNITY_FORMATTER _(L"SQL Formatter Options (Ultimate only) ")
+// [Community] Removed version-specific text
+#define COMMMUNITY_POWERTOOLS _(L"Power Tools Options")
+#define COMMUNITY_FORMATTER _(L"SQL Formatter Options")
 #define FORMATTER_PREVIEW		"SELECT\n  t1.column1 AS c1,\n  t1.column2 AS c2\nFROM table1 t1,\n  table2 t2\n\
 WHERE t1.column1 = t2.column1\nGROUP BY c1, c2\nORDER BY c1;"
 

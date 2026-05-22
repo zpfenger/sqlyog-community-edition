@@ -22,15 +22,16 @@
 //#define CONERROR L"An error occured when trying to connect to the server.\r\nMake sure your internet connection is active."
 #define CONERROR _(L"Unable to find update information")
 
+// [Community] Simplified: no version-specific upgrade messages
 #define UPGRADEYES	  _(L"Updates are available for SQLyog.\r\nPlease download and install the latest version")
-#define UPGRADEYESPRO _(L"Updates are available for SQLyog Professional.\r\nPlease download and install the latest version")
-#define UPGRADEYESENT _(L"Updates are available for SQLyog Enterprise.\r\nPlease download and install the latest version")
-#define UPGRADEYESULT _(L"Updates are available for SQLyog Ultimate.\r\nPlease download and install the latest version")
+// #define UPGRADEYESPRO _(L"Updates are available for SQLyog Professional.\r\nPlease download and install the latest version")
+// #define UPGRADEYESENT _(L"Updates are available for SQLyog Enterprise.\r\nPlease download and install the latest version")
+// #define UPGRADEYESULT _(L"Updates are available for SQLyog Ultimate.\r\nPlease download and install the latest version")
 
 #define UPGRADENO	 _(L"You are using the latest version of SQLyog")
-#define UPGRADENOPRO _(L"You are using the latest version of SQLyog Professional")
-#define UPGRADENOENT _(L"You are using the latest version of SQLyog Enterprise")
-#define UPGRADENOULT _(L"You are using the latest version of SQLyog Ultimate")
+// #define UPGRADENOPRO _(L"You are using the latest version of SQLyog Professional")
+// #define UPGRADENOENT _(L"You are using the latest version of SQLyog Enterprise")
+// #define UPGRADENOULT _(L"You are using the latest version of SQLyog Ultimate")
 
 #define UPGRDCHKING	_(L"Check for updates...")
 

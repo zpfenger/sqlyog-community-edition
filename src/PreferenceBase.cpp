@@ -1164,7 +1164,8 @@ PreferenceBase::OthersPrefHandleWmCommand(HWND hwnd, WPARAM wParam)
 
 					if (((pthemeinfo + index)->m_type == RESOURCE_THEME) && (pthemeinfo + index)->m_name.Compare("Dark") ==0)
 					{
-						pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
+						// [Community] Disabled: no upgrade prompt for Dark theme
+						//pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
 						THEMEINFO* pactivetheme;
 
 						pactivetheme = wyTheme::GetActiveThemeInfo();
@@ -1607,7 +1608,7 @@ PreferenceBase::InitOthersPrefValues()
 
 	if(pGlobals->m_pcmainwin->m_connection->m_enttype != ENT_NORMAL && pGlobals->m_pcmainwin->m_connection->m_enttype != ENT_ULTIMATE && pGlobals->m_pcmainwin->m_connection->m_enttype != ENT_TRIAL)
 	{
-		SetWindowText(GetDlgItem(m_hwnd, IDC_TRANSACTION), _(L"Transaction options (Ultimate only)"));
+		SetWindowText(GetDlgItem(m_hwnd, IDC_TRANSACTION), _(L"Transaction options"));
 		EnableWindow(GetDlgItem(m_hwnd, IDC_PROMPTTRANSACTION), FALSE);
 		EnableWindow(GetDlgItem(m_hwnd, IDC_PROMPTCLOSETRANSACTION), FALSE);
 		return;

@@ -623,7 +623,8 @@ DataView::OnWMCommand(WPARAM wparam, LPARAM lparam)
 #ifndef COMMUNITY
             SwitchView(FORM);
 #else
-            pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
+            // [Community] Disabled: no upgrade prompt for Form View
+            //pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
 #endif
 		    break;
 
@@ -8378,10 +8379,11 @@ DataView::ShowFormView(wyInt32 show, wyBool isprobe)
     }
 #else
     //with community we show the ad dialog
-    if(show != SW_HIDE && isprobe == wyFalse)
-    {
-        pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
-    }
+    // [Community] Disabled: no upgrade prompt
+    //if(show != SW_HIDE && isprobe == wyFalse)
+    //{
+    //    pGlobals->m_pcmainwin->m_connection->GetSQLyogUltimateDialog();
+    //}
 #endif
 
     return wyFalse;

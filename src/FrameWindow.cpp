@@ -171,18 +171,24 @@ FrameWindow::FrameWindow(HINSTANCE hinstance)
             section.SetAs("zh-cn");
             wyIni::IniWriteString("UserInterface", "Language", section.GetString(), dirstr.GetString());
         }
-        count = GetModuleFileName(NULL, directory, MAX_PATH - 1);
-	    directory[count - pGlobals->m_modulenamelength] = '\0';
-        dirstr.SetAs(directory);
-        dirstr.Add(LANGUAGE_DBFILE);
-
-        //Initialize L10nText library
-#ifdef _DEBUG
-		InitL10n(section.GetString(), dirstr.GetString(), wyFalse, wyTrue, wyFalse); 
-#else
-		InitL10n(section.GetString(), dirstr.GetString(), wyFalse, wyFalse, wyFalse); 
-#endif
     }
+    else
+    {
+        // [Community] Default to Chinese when no ini file exists
+        section.SetAs("zh-cn");
+    }
+
+    //Initialize L10nText library
+    count = GetModuleFileName(NULL, directory, MAX_PATH - 1);
+    directory[count - pGlobals->m_modulenamelength] = '\0';
+    dirstr.SetAs(directory);
+    dirstr.Add(LANGUAGE_DBFILE);
+
+#ifdef _DEBUG
+    InitL10n(section.GetString(), dirstr.GetString(), wyFalse, wyTrue, wyFalse); 
+#else
+    InitL10n(section.GetString(), dirstr.GetString(), wyFalse, wyFalse, wyFalse); 
+#endif
     
     m_hwndtooltip       = NULL;
 	m_hinstance			= hinstance;
@@ -335,10 +341,12 @@ FrameWindow::Create()
 	SetConnectionNumber();
 
 	//Sets the community ribbon
-	HandleCommunityRibbon();
+	// [Community] Disabled: upgrade ad ribbon is not needed for community edition
+	//HandleCommunityRibbon();
 	
 	//Upgrade check
-	CheckForUpgrade();
+	// [Community] Disabled: no automatic upgrade check
+	//CheckForUpgrade();
 	
     Resize();
 		
@@ -9703,11 +9711,14 @@ FrameWindow::OnCreateObjectWmHelp(HWND hwnd, wyChar *object)
 	}	
 }
 
-////check for upgrade	
+//check for upgrade	
 
 void
 FrameWindow::CheckForUpgrade(wyBool isexplict)
 {	
+	// [Community] Disabled: upgrade check is not needed for community edition
+	return;
+#if 0
 #if IS_FROM_WINDOWS_STORE == 1
 	return;
 #endif
@@ -9727,6 +9738,7 @@ FrameWindow::CheckForUpgrade(wyBool isexplict)
 		m_upgrdchk->m_hwndmain = m_hwndmain;
 		m_upgrdchk->HandleUpgradeCheck(isexplict);						
 	}
+#endif
 }
 
 ///Handles the community ribbon

@@ -38,11 +38,14 @@
 #include "filters.h"
 
 
-#define COMUNITY_HTTP	_(L"HTTP Tunneling (Ultimate only)")
-#define COMUNITY_SSH	_(L"SSH Tunneling (Ultimate only)")
-#define COMUNITY_SSL	_(L"SSL Encryption (Ultimate only)")
+// [Community] Removed version-specific text from tab labels
+#define COMUNITY_HTTP	_(L"HTTP Tunneling")
+#define COMUNITY_SSH	_(L"SSH Tunneling")
+#define COMUNITY_SSL	_(L"SSL Encryption")
 
-#define GETENT_DLG_TEXT _(L"Get SQLyog ULTIMATE today to enable this and dozens of other great features.")
+// [Community] Disabled: upgrade prompt text
+// #define GETENT_DLG_TEXT _(L"Get SQLyog ULTIMATE today to enable this and dozens of other great features.")
+#define GETENT_DLG_TEXT _(L"")
 
 ConnectionBase::ConnectionBase()
 {
@@ -2264,11 +2267,7 @@ ConnectionBase::SetAutocompleteTagBuildFlag(wyString *connsection, wyString *dir
 VOID
 ConnectionBase::GetSQLyogUltimateDialog()
 {	
-	HINSTANCE hinstance;
-
-	hinstance = pGlobals->m_hinstance;
-    	
-	DialogBox(hinstance, MAKEINTRESOURCE(IDD_GETSQLYOGULTIMATE),pGlobals->m_pcmainwin->m_hwndmain , GetUltimateDialogProc);
+	// [Community] Disabled: upgrade prompt dialog
 	return;
 }
 
@@ -2276,11 +2275,7 @@ ConnectionBase::GetSQLyogUltimateDialog()
 VOID
 ConnectionBase::GetSQLyogEntDialog()
 {
-	DialogBoxParam(pGlobals->m_hinstance, MAKEINTRESOURCE(IDD_GETSQLYOGENTERPRISE),
-				pGlobals->m_pcmainwin->m_hwndmain , 
-				GetEntDialogProc,
-				(LPARAM)this);
-	
+	// [Community] Disabled: upgrade prompt dialog
 	return;
 }
 

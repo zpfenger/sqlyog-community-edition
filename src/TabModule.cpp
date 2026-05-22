@@ -156,7 +156,8 @@ TabModule::Create(MDIWindow * wnd)
 	HTREEITEM	hitem = NULL;
     wyString temptest;   
     CreateTabControl();
-	CreateCommunityTabHeader();
+	// [Community] Disabled: no community ribbon ad header in tab area
+	//CreateCommunityTabHeader();
     CreateHistoryTab(wnd, wyFalse, wyFalse);
 	if(!pGlobals->m_conrestore)
 		CreateQueryEditorTab(wnd);    
@@ -1758,9 +1759,13 @@ TabModule::Resize(wyBool issetredraw)
 	
 	headvpos = vpos;
     headht = 20;
-	VERIFY(MoveWindow(m_hwndcommtytitle, hpos, headvpos, width, headht, TRUE));
-    InvalidateRect(m_hwndcommtytitle, NULL, TRUE);
-    UpdateWindow(m_hwndcommtytitle);
+	// [Community] Disabled: skip if community ribbon is not created
+	if(m_hwndcommtytitle)
+	{
+		VERIFY(MoveWindow(m_hwndcommtytitle, hpos, headvpos, width, headht, TRUE));
+		InvalidateRect(m_hwndcommtytitle, NULL, TRUE);
+		UpdateWindow(m_hwndcommtytitle);
+	}
 	height = height - 20;
 	
 #endif

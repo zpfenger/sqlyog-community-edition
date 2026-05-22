@@ -296,12 +296,14 @@ L10n::InitDialog(HWND hwnd)
     {
         temp.SetAs(directory);
         wyIni::IniGetString("UserInterface", "Language", "", &langcode, temp.GetString());
-        hassavedlanguage = langcode.GetLength() != 0;
-        if(hassavedlanguage == wyFalse)
-        {
-            langcode.SetAs("zh-cn");
-        }
+        hassavedlanguage = (langcode.GetLength() != 0) ? wyTrue : wyFalse;
         versionold = wyIni::IniGetInt("UserInterface", "Version", 0, temp.GetString());
+    }
+
+    // [Community] Default to Chinese if no language saved
+    if(hassavedlanguage == wyFalse)
+    {
+        langcode.SetAs("zh-cn");
     }
 
     hicon = LoadIcon(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_MAIN));

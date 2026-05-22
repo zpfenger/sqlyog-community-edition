@@ -30,7 +30,9 @@
 which is probably the best known Open Source licence. The formal terms of GPL licence \
 can be found at http://www.fsf.org/licence/.")
 
-#define STATUS_LINK _("Upgrade to SQLyog Ultimate")
+// [Community] Disabled: upgrade link text
+// #define STATUS_LINK _("Upgrade to SQLyog Ultimate")
+#define STATUS_LINK _("")
 
 ConnectionCommunity::ConnectionCommunity()
 {
@@ -95,9 +97,11 @@ ConnectionCommunity::OnAboutWmCommand(HWND hwnd, WPARAM wparam)
 void 
 ConnectionCommunity::OnStatusBarWmCommand(HWND hwnd, WPARAM wparam)
 {
+	// [Community] Disabled: status bar upgrade link
+	/*
     if((HIWORD(wparam) == STN_CLICKED)&&(LOWORD(wparam) == IDC_LINK))
 		ShellExecute(NULL, L"open", TEXT(BUYURL_STATUSBAR), NULL, NULL, SW_SHOWNORMAL);
-    
+	*/
     return;
 }
 
@@ -1347,7 +1351,8 @@ ConnectionCommunity::OnWmCommand(HWND hwndactive, MDIWindow *wnd, WPARAM wparam)
     case ID_VDDTOOL:
 		{
 			m_powertoolsID = LOWORD(wparam);
-			GetSQLyogUltimateDialog();
+			// [Community] Disabled: no upgrade prompt
+			//GetSQLyogUltimateDialog();
 			m_powertoolsID = 0;
 		}
 	    break;
@@ -1375,7 +1380,8 @@ ConnectionCommunity::OnWmCommand(HWND hwndactive, MDIWindow *wnd, WPARAM wparam)
 	case ID_SAVEPOINT_CREATESAVEPOINT:	
 	case ID_SAVEPOINT_RELEASESAVEPOINT:
 		{
-			GetSQLyogUltimateDialog();
+			// [Community] Disabled: no upgrade prompt for transaction features
+			//GetSQLyogUltimateDialog();
 			break;
 		}
 		
@@ -1412,8 +1418,9 @@ ConnectionCommunity::CheckRegistration(HWND hwnd, void *main)
 void 
 ConnectionCommunity::OnClose()
 {	
-	m_isapclose = wyTrue;
-	ShowDialog(pGlobals->m_pcmainwin->m_hwndmain);
+	// [Community] Disabled: no nag screen on close
+	//m_isapclose = wyTrue;
+	//ShowDialog(pGlobals->m_pcmainwin->m_hwndmain);
 	return;
 }
 
@@ -1470,6 +1477,8 @@ ConnectionCommunity::OnDlgWmCommand(HWND hwnd, WPARAM wparam)
     case IDCONTINUE:
         EndDialog(hwnd, 1);
         break;
+	// [Community] Disabled: Buy button on nag screen
+	/*
 	case IDC_BUY_LINK:	
 		EndDialog(hwnd, 1);
 		//m_linkadd.SetAs(BUYURL_BUYNAGBEGIN);
@@ -1479,6 +1488,7 @@ ConnectionCommunity::OnDlgWmCommand(HWND hwnd, WPARAM wparam)
 
 				
 		break;
+	*/
 
     }
 
@@ -1486,6 +1496,8 @@ ConnectionCommunity::OnDlgWmCommand(HWND hwnd, WPARAM wparam)
     {
 	    if(LOWORD(wparam)== IDC_COMLINK )
 		{
+			// [Community] Disabled: clicking splash opens buy page
+			/*
 			if(m_isapclose == wyTrue)
 			{
 				//SHELLEXECUTE on press 'buy'on nag screen on closing application
@@ -1494,11 +1506,12 @@ ConnectionCommunity::OnDlgWmCommand(HWND hwnd, WPARAM wparam)
 				EndDialog(hwnd, 1);				
 			}
 
-			/*else
+			else
 			{
 				m_linkadd.SetAs(BUYURL_NAGBEGIN);
 				EndDialog(hwnd, 1);				
-			}*/
+			}
+			*/
 		}
 	}
 }
@@ -1624,17 +1637,19 @@ ConnectionCommunity::RepaintTabs(WPARAM wparam)
 	return;
 }
 
-void 
+void
 ConnectionCommunity::OnSchdOdbcImport()
 {
-	GetSQLyogUltimateDialog();
+	// [Community] Disabled: no upgrade prompt
+	//GetSQLyogUltimateDialog();
 	return;
 }
 
-void 
+void
 ConnectionCommunity::OnScheduleExport()
 {
-	GetSQLyogUltimateDialog();
+	// [Community] Disabled: no upgrade prompt
+	//GetSQLyogUltimateDialog();
 	return;
 }
 
