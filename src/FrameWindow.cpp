@@ -11604,7 +11604,10 @@ ConnectFromList(wyString* failedconnections, wyString* sessionfile)
 				pGlobals->m_pcmainwin->m_hwndconntab = pGlobals->m_pcmainwin->m_conntab->CreateConnectionTabControl(pGlobals->m_pcmainwin->GetHwnd());
 			}
 
-			pcquerywnd	= new MDIWindow(pGlobals->m_pcmainwin->GetMDIWindow(), &my_arg[j].conninfo, my_arg[j].conninfo.m_db, my_arg[j].conninfo.m_title);
+			// During session restore, pass empty dbname to show all databases in object browser
+			// The previously selected database will be restored via SyncObjectDB later
+			wyString emptydb;
+			pcquerywnd	= new MDIWindow(pGlobals->m_pcmainwin->GetMDIWindow(), &my_arg[j].conninfo, emptydb, my_arg[j].conninfo.m_title);
 			if(pcquerywnd)
 			{
 				pcquerywnd->m_listtabdetails = my_arg[j].tabdetails;
