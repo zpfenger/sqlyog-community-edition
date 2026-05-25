@@ -1,25 +1,17 @@
-# SQLyog Community Edition
+# SQLyog Community Edition（修改版）
+本项目基于官方开源仓库 [webyog/sqlyog-community](https://github.com/webyog/sqlyog-community) 进行修改与增强。
+**原项目版权归 Webyog Inc. 所有，本项目遵守 GNU GPL v2.0 开源协议。**
 
-SQLyog is a powerful GUI tool to manage MySQL and MariaDB servers and databases in physical, virtual, and cloud environments.
+## 项目说明
+- 移除企业版推广、授权提示、购买链接
+- 补全社区版缺失的字段补全、功能增强
+- 保留全部开源核心能力，无闭源代码
 
-SQLyog has no dependencies on runtimes (such as Microsoft .NET and Java) and database abstraction layers (such as ODBC and JDBC).
+## 许可证
+本项目**继承原项目 GPL v2.0 协议**，修改后的整体作品仍以 GPL v2.0 开源。
+完整许可证见 [LICENSE.md](./LICENSE.md)
 
-SQLyog runs on Microsoft Windows. It may also run on Linux and Unix via Wine.
-
-Users of SQLyog’s Community edition can get support through Webyog’s [forums for SQLyog](https://forums.webyog.com/forums/forum/sqlyog-2/). Webyog also maintains an extensive [FAQ for SQLyog](http://faq.webyog.com/) for frequently asked questions.
-
-Download SQLyog’s Community edition [here](https://github.com/webyog/sqlyog-community/wiki/Downloads).
-
-Learn about why you should consider upgrading from the Community edition to the Ultimate edition [here](https://www.idera.com/resourcecentral/infographics/sqlyog-ultimate-edition-vs-sqlyog-community-edition).
-
-Learn more about SQLyog’s commercial edition [here](https://webyog.com/product/sqlyog/).
-
-Download a free, fully functional, 14-day trial of SQLyog’s commercial edition [here](https://webyog.com/product/sqlyog/trial/).
-
-Schedule a free product demonstration [here](https://webyog.com/demo).
-
-View prices and purchase SQLyog’s commercial edition [here](https://store.webyog.com/product/sqlyogpricing).
-
-Learn more about the latest releases of SQLyog in Webyog’s [blog](https://blog.sqlyog.com/category/releases/).
-
-Also learn more about Webyog’s GUI tool to monitor the performance of MySQL and MariaDB, [SQL DM for MySQL](https://webyog.com/product/monyog/).
+## 声明
+- 本项目为**个人修改版**，与官方 Webyog / Idera 无关
+- 不提供商业授权、不冒充官方、不用于盈利分发
+- 所有修改遵循开源协议，源码完全公开 for MySQL](https://webyog.com/product/monyog/)

@@ -506,6 +506,18 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
     tr.lpstrText = line_text;
     SendMessage(hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&tr);
 
+    // Get full document text for alias extraction (FROM may be on a different line)
+    int doc_len = (int)SendMessage(hwnd, SCI_GETLENGTH, 0, 0);
+    char* doc_text = NULL;
+    if (doc_len > 0) {
+        doc_text = new char[doc_len + 1];
+        struct TextRange dr;
+        dr.chrg.cpMin = 0;
+        dr.chrg.cpMax = doc_len;
+        dr.lpstrText = doc_text;
+        SendMessage(hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&dr);
+    }
+
     // Extract prefix (current word before cursor)
     bool cursor_after_space = (line_text[text_len - 1] == ' ' || line_text[text_len - 1] == '\t');
 
@@ -513,6 +525,7 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
     while (i >= 0 && (line_text[i] == ' ' || line_text[i] == '\t')) i--;
 
     if (i < 0) {
+        delete[] doc_text;
         delete[] line_text;
         return CTX_UNKNOWN;
     }
@@ -538,7 +551,7 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
         strncpy(word, line_text + word_start, word_len);
         word[word_len] = '\0';
 
-        ExtractAliases(line_text);
+        ExtractAliases(doc_text ? doc_text : line_text);
 
         char* dot = strchr(word, '.');
         if (dot) {
@@ -549,6 +562,7 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
             table_idx = FindTableIndex(table_name);
             if (table_idx >= 0) {
                 prefix.SetAs(col_prefix);
+                delete[] doc_text;
                 delete[] line_text;
                 return CTX_COLUMN_REF;
             }
@@ -559,8 +573,70 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
     if (word_len > 0 && word_len < (int)sizeof(word)) {
         prefix.SetAs(word);
     } else {
+        delete[] doc_text;
         delete[] line_text;
         return CTX_UNKNOWN;
+    }
+
+    // Check cursor_after_space before analyzing preceding keyword.
+    // When the cursor is right after a space (e.g. "SELECT "), the word
+    // extracted by skipping trailing spaces is the keyword itself.  We must
+    // recognise it here so that "SELECT " returns CTX_WHERE_EXPR instead of
+    // falling through to CTX_KEYWORD_FUNC when j < 0 (no preceding text).
+    // When the word ends with ',' (e.g. "col1, " after "SELECT col1, "),
+    // it is a column reference followed by a comma — not a keyword.
+    if (cursor_after_space) {
+        char current_word[128] = {0};
+        int copy_len = min(word_len, (int)sizeof(current_word) - 1);
+        strncpy(current_word, word, copy_len);
+        current_word[copy_len] = '\0';
+        for (int k = 0; current_word[k]; k++) {
+            if (current_word[k] >= 'a' && current_word[k] <= 'z')
+                current_word[k] -= 32;
+        }
+
+        // Strip trailing comma before keyword check
+        int clen = (int)strlen(current_word);
+        if (clen > 1 && current_word[clen - 1] == ',')
+            current_word[clen - 1] = '\0';
+
+        if (IsTableContextKeyword(current_word)) {
+            prefix.Clear();
+            delete[] doc_text;
+            delete[] line_text;
+            return CTX_TABLE_REF;
+        }
+
+        if (IsExprContextKeyword(current_word)) {
+            prefix.Clear();
+            delete[] doc_text;
+            delete[] line_text;
+            return CTX_WHERE_EXPR;
+        }
+    }
+
+    // Word contains a comma — we are inside a comma-separated list
+    // (e.g. "col1,col" or "col1,col2,col").  The text after the last
+    // comma is the prefix for the current position.
+    {
+        const char* last_comma = strrchr(word, ',');
+        if (last_comma) {
+            const char* after = last_comma + 1;
+            if (*after)
+                prefix.SetAs(after);
+            else
+                prefix.Clear();
+            delete[] doc_text;
+            delete[] line_text;
+            return CTX_WHERE_EXPR;
+        }
+    }
+
+    // Character before the word is a comma (e.g. "uid,u" — word="u", char before=',')
+    if (word_start > 0 && line_text[word_start - 1] == ',') {
+        delete[] doc_text;
+        delete[] line_text;
+        return CTX_WHERE_EXPR;
     }
 
     // Analyze preceding keyword
@@ -568,6 +644,7 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
     while (j >= 0 && (line_text[j] == ' ' || line_text[j] == '\t')) j--;
 
     if (j < 0) {
+        delete[] doc_text;
         delete[] line_text;
         return CTX_KEYWORD_FUNC;
     }
@@ -594,35 +671,22 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
                 prev_word[k] -= 32;
         }
 
-        if (cursor_after_space) {
-            char current_word[128] = {0};
-            int copy_len = min(word_len, (int)sizeof(current_word) - 1);
-            strncpy(current_word, word, copy_len);
-            current_word[copy_len] = '\0';
-            for (int k = 0; current_word[k]; k++) {
-                if (current_word[k] >= 'a' && current_word[k] <= 'z')
-                    current_word[k] -= 32;
-            }
-
-            if (IsTableContextKeyword(current_word)) {
-                prefix.Clear();
-                delete[] line_text;
-                return CTX_TABLE_REF;
-            }
-
-            if (IsExprContextKeyword(current_word)) {
-                prefix.Clear();
-                delete[] line_text;
-                return CTX_WHERE_EXPR;
-            }
-        }
-
         if (IsTableContextKeyword(prev_word)) {
+            delete[] doc_text;
             delete[] line_text;
             return CTX_TABLE_REF;
         }
 
         if (IsExprContextKeyword(prev_word)) {
+            delete[] doc_text;
+            delete[] line_text;
+            return CTX_WHERE_EXPR;
+        }
+
+        // Comma in a list context (e.g. "SELECT col1, " or "col1,col")
+        // → column/function completion is appropriate
+        if (prev_word[0] == ',' && prev_word[1] == '\0') {
+            delete[] doc_text;
             delete[] line_text;
             return CTX_WHERE_EXPR;
         }
@@ -698,6 +762,7 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
                 if (*into_pos == '(') {
                     // We're inside INSERT INTO tablename ( - return CTX_INSERT_COLS
                     table_idx = FindTableIndex(ins_table);
+                    delete[] doc_text;
                     delete[] line_text;
                     return CTX_INSERT_COLS;
                 }
@@ -705,6 +770,7 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
         }
     }
 
+    delete[] doc_text;
     delete[] line_text;
     return CTX_KEYWORD_FUNC;
 }
@@ -743,7 +809,7 @@ CCommunityAutoComplete::ExtractAliases(const char* sql_text) {
 
             char table_name[128] = {0};
             int ti = 0;
-            while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != '\n' && ti < 127) {
+            while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != '\n' && *p != ';' && ti < 127) {
                 table_name[ti++] = *p;
                 p++;
             }
@@ -758,12 +824,12 @@ CCommunityAutoComplete::ExtractAliases(const char* sql_text) {
                 p += 2;
                 while (*p == ' ' || *p == '\t') p++;
                 int ai = 0;
-                while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != '\n' && ai < 63) {
+                while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != '\n' && *p != ';' && ai < 63) {
                     alias[ai++] = *p;
                     p++;
                 }
                 alias[ai] = '\0';
-            } else if (*p && *p != ',' && *p != '\n' && *p != '\r' &&
+            } else if (*p && *p != ',' && *p != '\n' && *p != '\r' && *p != ';' &&
                        strncmp(p, "WHERE", 5) != 0 && strncmp(p, "ON", 2) != 0 &&
                        strncmp(p, "INNER", 5) != 0 && strncmp(p, "LEFT", 4) != 0 &&
                        strncmp(p, "RIGHT", 5) != 0 && strncmp(p, "JOIN", 4) != 0 &&
@@ -771,7 +837,7 @@ CCommunityAutoComplete::ExtractAliases(const char* sql_text) {
                        strncmp(p, "ORDER", 5) != 0 && strncmp(p, "HAVING", 6) != 0 &&
                        strncmp(p, "LIMIT", 5) != 0) {
                 int ai = 0;
-                while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != '\n' && ai < 63) {
+                while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != '\n' && *p != ';' && ai < 63) {
                     alias[ai++] = *p;
                     p++;
                 }

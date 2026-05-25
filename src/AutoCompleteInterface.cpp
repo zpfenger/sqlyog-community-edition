@@ -315,6 +315,13 @@ AutoCompleteInterface::OnACNotification(WPARAM wparam, LPARAM lparam)
             if(IsCommunityStopChar((char)scn->ch))
             {
                 SendMessage(hwnd, SCI_AUTOCCANCEL, 0, 0);
+                // Dot triggers table.column completion,
+                // comma triggers next-field completion — must re-show
+                if((char)scn->ch == '.' || (char)scn->ch == ',')
+                {
+                    EditorBase* eb = (EditorBase*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+                    ShowCommunityCompletion(m_community_ac, hwnd, eb);
+                }
                 return wyFalse;
             }
 
