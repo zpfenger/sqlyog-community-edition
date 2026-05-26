@@ -5,6 +5,8 @@
 #include "TrieIndex.h"
 #include "Global.h"
 #include <vector>
+#include <string>
+#include <utility>
 
 class EditorBase;
 
@@ -67,6 +69,7 @@ private:
 
     std::vector<ACCompletionItem>    m_dynamic_items;
     std::vector<ACTableInfo>         m_tables;
+    std::vector<std::pair<std::string, int>> m_alias_map;  // alias -> table index (supports multiple aliases per table)
     TrieIndex                        m_trie_databases;
     TrieIndex                        m_trie_tables;
     TrieIndex                        m_trie_columns;

@@ -303,6 +303,7 @@ CCommunityAutoComplete::ClearDynamicMetadata() {
     EnterCriticalSection(&m_cs);
     m_dynamic_items.clear();
     m_tables.clear();
+    m_alias_map.clear();
     m_trie_databases.Clear();
     m_trie_tables.Clear();
     m_trie_columns.Clear();
@@ -453,6 +454,7 @@ AsyncLoadThread(void* arg) {
     EnterCriticalSection(&ac->m_cs);
     ac->m_dynamic_items.swap(new_items);
     ac->m_tables.swap(new_tables);
+    ac->m_alias_map.clear();  // table indices changed, invalidate alias cache
     ac->m_trie_databases.Swap(new_trie_databases);
     ac->m_trie_tables.Swap(new_trie_tables);
     ac->m_trie_columns.Swap(new_trie_columns);
@@ -789,6 +791,7 @@ CCommunityAutoComplete::ExtractAliases(const char* sql_text) {
 
     for (size_t i = 0; i < m_tables.size(); i++)
         m_tables[i].alias[0] = '\0';
+    m_alias_map.clear();
 
     const char* keywords[] = {"FROM", "JOIN"};
     for (int k = 0; k < 2; k++) {
@@ -847,7 +850,13 @@ CCommunityAutoComplete::ExtractAliases(const char* sql_text) {
             if (alias[0]) {
                 for (size_t i = 0; i < m_tables.size(); i++) {
                     if (_stricmp(m_tables[i].name, table_name) == 0) {
-                        strncpy(m_tables[i].alias, alias, sizeof(m_tables[i].alias) - 1);
+                        if (!m_tables[i].alias[0]) {
+                            // First alias for this table - set directly
+                            strncpy(m_tables[i].alias, alias, sizeof(m_tables[i].alias) - 1);
+                        } else {
+                            // Additional alias (same table used multiple times) - save to alias map
+                            m_alias_map.push_back(std::make_pair(std::string(alias), (int)i));
+                        }
                         break;
                     }
                 }
@@ -861,11 +870,17 @@ CCommunityAutoComplete::ExtractAliases(const char* sql_text) {
 int
 CCommunityAutoComplete::FindTableIndex(const char* name) {
     if (!name || !name[0]) return -1;
+    // Search by table name or primary alias
     for (size_t i = 0; i < m_tables.size(); i++) {
         if (_stricmp(m_tables[i].name, name) == 0)
             return (int)i;
         if (m_tables[i].alias[0] && _stricmp(m_tables[i].alias, name) == 0)
             return (int)i;
+    }
+    // Search additional aliases (same table with multiple aliases in SQL)
+    for (size_t i = 0; i < m_alias_map.size(); i++) {
+        if (_stricmp(m_alias_map[i].first.c_str(), name) == 0)
+            return m_alias_map[i].second;
     }
     return -1;
 }
