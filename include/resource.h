@@ -1174,6 +1174,10 @@
 #define IDM_TMAKER_SAVE                 40107
 #define IDM_DATATOCLIPBOARD             40108
 #define IDM_SELDATATOCLIPBOARD          40109
+#define IDM_COPY_ALL_ROWS_INSERT        41900
+#define IDM_COPY_ALL_ROWS_UPDATE        41901
+#define IDM_COPY_SEL_ROWS_INSERT        41902
+#define IDM_COPY_SEL_ROWS_UPDATE        41903
 #define IDM_TOOLS_TABLEDIAG             40116
 #define IDM_EDIT_RESULT_TEXT            40118
 #define ACCEL_RESULT                    40119

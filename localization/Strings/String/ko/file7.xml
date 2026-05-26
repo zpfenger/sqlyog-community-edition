@@ -242,4 +242,8 @@ SQLyog 터널러를 노출시키고 싶지 않다면 이름을 변경할 수도 
 	<string name="2677">SSL 암호화 사용</string>
 	<string name="2678">CA 인증서</string>
 	<string name="2679">클라이언트 키</string>
+	<string name="3690">모든 행을 INSERT문으로 복사</string>
+	<string name="3691">모든 행을 UPDATE문으로 복사</string>
+	<string name="3692">선택한 행을 INSERT문으로 복사</string>
+	<string name="3693">선택한 행을 UPDATE문으로 복사</string>
 </resources>

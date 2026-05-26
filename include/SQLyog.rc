@@ -260,6 +260,11 @@ BEGIN
             MENUITEM "Copy Cell Data To Clipboard", IDM_IMEX_EXPORTCELL
             MENUITEM "Copy All Rows To Clipboard...", IDM_DATATOCLIPBOARD
             MENUITEM "Copy Selected Row(s) To Clipboard...", IDM_SELDATATOCLIPBOARD
+            MENUITEM SEPARATOR
+            MENUITEM "Copy All Rows As INSERT", IDM_COPY_ALL_ROWS_INSERT
+            MENUITEM "Copy All Rows As UPDATE", IDM_COPY_ALL_ROWS_UPDATE
+            MENUITEM "Copy Selected Row(s) As INSERT", IDM_COPY_SEL_ROWS_INSERT
+            MENUITEM "Copy Selected Row(s) As UPDATE", IDM_COPY_SEL_ROWS_UPDATE
         END
         MENUITEM "Duplicate Current Row",       IDM_DUPLICATE_ROW
     END

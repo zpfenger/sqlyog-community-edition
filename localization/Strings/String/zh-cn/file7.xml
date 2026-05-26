@@ -240,4 +240,8 @@
 	<string name="2677">使用SSL加密&amp;</string>
 	<string name="2678">CA证书&amp;</string>
 	<string name="2679">&amp;客户端密钥</string>
+	<string name="3690">复制所有行为INSERT语句</string>
+	<string name="3691">复制所有行为UPDATE语句</string>
+	<string name="3692">复制已选行为INSERT语句</string>
+	<string name="3693">复制已选行为UPDATE语句</string>
 </resources>

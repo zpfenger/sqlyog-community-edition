@@ -242,4 +242,8 @@ You may rename it if you don&apos;t want to expose the SQLyog tunneler)</string>
 	<string name="2677">Use SSL Encr&amp;yption</string>
 	<string name="2678">CA Certificat&amp;e</string>
 	<string name="2679">Cl&amp;ient Key</string>
+	<string name="3690">Copy All Rows As INSERT</string>
+	<string name="3691">Copy All Rows As UPDATE</string>
+	<string name="3692">Copy Selected Row(s) As INSERT</string>
+	<string name="3693">Copy Selected Row(s) As UPDATE</string>
 </resources>

@@ -1515,12 +1515,43 @@ class DataView
 	    */
 	    wyBool			        AddSelDataToClipBoard();
 
+	    ///Copies all rows as INSERT statements to clipboard.
+	    /**
+	    @returns wyTrue on success else wyFalse
+	    */
+	    wyBool			        AddDataAsInsertToClipBoard();
+
+	    ///Copies all rows as UPDATE statements to clipboard.
+	    /**
+	    @returns wyTrue on success else wyFalse
+	    */
+	    wyBool			        AddDataAsUpdateToClipBoard();
+
+	    ///Copies selected rows as INSERT statements to clipboard.
+	    /**
+	    @returns wyTrue on success else wyFalse
+	    */
+	    wyBool			        AddSelDataAsInsertToClipBoard();
+
+	    ///Copies selected rows as UPDATE statements to clipboard.
+	    /**
+	    @returns wyTrue on success else wyFalse
+	    */
+	    wyBool			        AddSelDataAsUpdateToClipBoard();
 	    ///Gets data from the clipboard
 	    /**
 	    @param selected		    : IN selected row or all the rows
         @returns the memory
 	    */
 	    HGLOBAL			        GetViewData(wyBool selected); 
+
+	    ///Generates SQL statements (INSERT or UPDATE) for clipboard.
+	    /**
+	    @param selected		    : IN selected row or all the rows
+	    @param isinsert		    : IN wyTrue for INSERT, wyFalse for UPDATE
+	    @returns the memory handle
+	    */
+	    HGLOBAL			        GetSQLData(wyBool selected, wyBool isinsert);
 
 	    ///Calculate the total memory required to copy the contents of the clipboard to the memory
 	    /**

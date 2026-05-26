@@ -612,6 +612,46 @@ DataView::OnWMCommand(WPARAM wparam, LPARAM lparam)
             
             break;
 
+        //copy all rows as INSERT statements to clipboard
+	    case IDM_COPY_ALL_ROWS_INSERT:
+            if(m_data->m_datares)
+            {
+                CustomGrid_ApplyChanges(m_hwndgrid);
+		        AddDataAsInsertToClipBoard();
+            }
+
+		    break;
+
+        //copy all rows as UPDATE statements to clipboard
+	    case IDM_COPY_ALL_ROWS_UPDATE:
+            if(m_data->m_datares)
+            {
+                CustomGrid_ApplyChanges(m_hwndgrid);
+		        AddDataAsUpdateToClipBoard();
+            }
+
+		    break;
+
+        //copy selected rows as INSERT statements to clipboard
+	    case IDM_COPY_SEL_ROWS_INSERT:
+            if(m_data->m_datares)
+            {
+                CustomGrid_ApplyChanges(m_hwndgrid);
+		        AddSelDataAsInsertToClipBoard();
+            }
+
+		    break;
+
+        //copy selected rows as UPDATE statements to clipboard
+	    case IDM_COPY_SEL_ROWS_UPDATE:
+            if(m_data->m_datares)
+            {
+                CustomGrid_ApplyChanges(m_hwndgrid);
+		        AddSelDataAsUpdateToClipBoard();
+            }
+
+		    break;
+
         //switch to grid view
 	    case ID_VIEW_GRIDVIEW:	
             SwitchView(GRID);
@@ -6570,6 +6610,476 @@ DataView::AddSelDataToClipBoard()
 	return wyFalse;
 }
 
+//function adds all rows as INSERT statements to clipboard
+wyBool
+DataView::AddDataAsInsertToClipBoard()
+{
+	HGLOBAL hglbcopy;
+
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
+
+	hglbcopy = GetSQLData(wyFalse, wyTrue);
+
+	if(hglbcopy == 0)
+    {
+		return wyFalse;
+    }
+
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
+
+	if(!(OpenClipboard(m_hwndgrid)))
+    {
+		return wyFalse;
+    }
+
+	EmptyClipboard();
+	SetClipboardData(CF_UNICODETEXT, hglbcopy);
+	CloseClipboard();
+
+	return wyTrue;
+}
+
+//function adds all rows as UPDATE statements to clipboard
+wyBool
+DataView::AddDataAsUpdateToClipBoard()
+{
+	HGLOBAL hglbcopy;
+
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
+
+	hglbcopy = GetSQLData(wyFalse, wyFalse);
+
+	if(hglbcopy == 0)
+    {
+		return wyFalse;
+    }
+
+	SetCursor(LoadCursor(NULL, IDC_ARROW));
+
+	if(!(OpenClipboard(m_hwndgrid)))
+    {
+		return wyFalse;
+    }
+
+	EmptyClipboard();
+	SetClipboardData(CF_UNICODETEXT, hglbcopy);
+	CloseClipboard();
+
+	return wyTrue;
+}
+
+//function adds selected rows as INSERT statements to clipboard
+wyBool
+DataView::AddSelDataAsInsertToClipBoard()
+{
+	HCURSOR		hcursor;
+	HGLOBAL		hglbcopy;
+
+	hcursor = GetCursor();
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
+	ShowCursor(1);
+
+	hglbcopy = GetSQLData(wyTrue, wyTrue);
+
+	if(!hglbcopy)
+    {
+		return wyFalse;
+    }
+
+	SetCursor(hcursor);
+	ShowCursor(1);
+
+	if(!(OpenClipboard(m_hwndgrid)))
+    {
+		return wyFalse;
+    }
+
+	EmptyClipboard();
+	SetClipboardData(CF_UNICODETEXT, hglbcopy);
+	CloseClipboard();
+	return wyTrue;
+}
+
+//function adds selected rows as UPDATE statements to clipboard
+wyBool
+DataView::AddSelDataAsUpdateToClipBoard()
+{
+	HCURSOR		hcursor;
+	HGLOBAL		hglbcopy;
+
+	hcursor = GetCursor();
+	SetCursor(LoadCursor(NULL, IDC_WAIT));
+	ShowCursor(1);
+
+	hglbcopy = GetSQLData(wyTrue, wyFalse);
+
+	if(!hglbcopy)
+    {
+		return wyFalse;
+    }
+
+	SetCursor(hcursor);
+	ShowCursor(1);
+
+	if(!(OpenClipboard(m_hwndgrid)))
+    {
+		return wyFalse;
+    }
+
+	EmptyClipboard();
+	SetClipboardData(CF_UNICODETEXT, hglbcopy);
+	CloseClipboard();
+	return wyTrue;
+}
+
+//generates SQL statements (INSERT or UPDATE) for clipboard
+HGLOBAL
+DataView::GetSQLData(wyBool selected, wyBool isinsert)
+{
+	INT64			numfields, i;
+	wyUInt32		rowcount, j;
+	wyUInt32		len[4096] = {0}, *length, nsize = 0, lenwchar = 1;
+	LPWSTR			lpstrcopy = NULL;
+	HGLOBAL			hglbcopy = NULL;
+	wyBool			isrowchecked = wyFalse, copyselectedrow = wyFalse;
+	wyInt32			selectedrow = 0;
+	MYSQL_ROW		myrow;
+	MYSQL_FIELD		*fields;
+	wyString		tablename, colname, sqlstr;
+	wyChar			*escapebuf = NULL;
+	wyString		escapestr;
+	wyInt32			pkcount = 0;
+	wyBool			*iscolumnprimary = NULL;
+	wyUInt32		totallen;
+
+	// validate data
+	if(!m_data || !m_data->m_datares || !m_data->m_rowarray)
+		return NULL;
+
+	fields    = m_data->m_datares->fields;
+	numfields = m_data->m_datares->field_count;
+
+	if(numfields <= 0)
+		return NULL;
+
+	// get table name: prefer m_data->m_table, fallback to first column's table
+	if(m_data->m_table.GetLength())
+	{
+		tablename.SetAs(m_data->m_table);
+	}
+	else if(fields[0].org_table && fields[0].org_table[0])
+	{
+		tablename.SetAs(fields[0].org_table, m_wnd->m_ismysql41);
+	}
+	else if(fields[0].table && fields[0].table[0])
+	{
+		tablename.SetAs(fields[0].table, m_wnd->m_ismysql41);
+	}
+	else
+	{
+		tablename.SetAs("table_name");
+	}
+
+	// detect primary keys for UPDATE statements
+	iscolumnprimary = (wyBool*)calloc(numfields, sizeof(wyBool));
+	if(!iscolumnprimary)
+		return NULL;
+
+	if(!isinsert && IsAnyPrimary(m_wnd->m_tunnel, m_data->m_keyres, &pkcount) == wyTrue && pkcount > 0)
+	{
+		for(i = 0; i < numfields; i++)
+		{
+			GetColumnName(colname, (wyInt32)i);
+			if(colname.GetLength() && IsColumnPrimary(m_wnd->m_tunnel, m_data->m_fieldres, (wyChar*)colname.GetString()) == wyTrue)
+			{
+				iscolumnprimary[i] = wyTrue;
+			}
+		}
+	}
+
+	// pre-allocate memory generously
+	rowcount = m_data->m_rowarray->GetLength();
+	if(rowcount == 0)
+	{
+		free(iscolumnprimary);
+		return NULL;
+	}
+
+	// estimate: each row can be up to (numfields * 200) wide chars for SQL
+	totallen = (wyUInt32)(rowcount * numfields * 200 + 4096);
+	totallen *= sizeof(wyWChar);
+
+	hglbcopy = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, totallen);
+	if(!hglbcopy)
+	{
+		free(iscolumnprimary);
+		return NULL;
+	}
+
+	lpstrcopy = (LPWSTR)GlobalLock(hglbcopy);
+	nsize = 0;
+
+	// iterate rows
+	selectedrow = CustomGrid_GetCurSelRow(m_hwndgrid);
+
+	for(j = 0; j < rowcount; j++)
+	{
+		unsigned int tj = j;
+
+		if(selected == wyTrue && m_data->m_checkcount == 0)
+		{
+			tj = j = selectedrow;
+			copyselectedrow = wyTrue;
+		}
+		else if((selected == wyTrue && m_data->m_rowarray->GetRowExAt(j)->m_ischecked == wyFalse && copyselectedrow == wyFalse)
+			|| (m_data->m_rowarray->GetRowExAt(j)->IsNewRow() || (wyInt32)j == m_data->m_modifiedrow))
+		{
+			continue;
+		}
+
+		isrowchecked = wyTrue;
+		myrow = m_data->m_rowarray->GetRowExAt(tj)->m_row;
+
+		// get column lengths
+		GetColLengthArray(myrow, numfields, len);
+		length = len;
+
+		if(isinsert)
+		{
+			// build INSERT statement
+			// INSERT INTO `db`.`table` (`col1`, `col2`, ...) VALUES ('val1', 'val2', ...);
+			sqlstr.Sprintf("INSERT INTO `%s` (", tablename.GetString());
+
+			// column names
+			for(i = 0; i < numfields; i++)
+			{
+				GetColumnName(colname, (wyInt32)i);
+				if(i > 0)
+					sqlstr.Add(", ");
+				sqlstr.AddSprintf("`%s`", colname.GetString());
+			}
+			sqlstr.Add(") VALUES(");
+
+			// values
+			for(i = 0; i < numfields; i++)
+			{
+				if(i > 0)
+					sqlstr.Add(",");
+
+				if(!myrow[i])
+				{
+					sqlstr.Add("NULL");
+				}
+				else
+				{
+					// escape the value
+					if(escapebuf)
+						free(escapebuf);
+					escapebuf = (wyChar*)malloc((length[i] * 2) + 1);
+					if(escapebuf)
+					{
+						m_wnd->m_tunnel->mysql_real_escape_string(m_wnd->m_mysql, escapebuf, myrow[i], length[i]);
+						escapestr.SetAs(escapebuf, m_wnd->m_ismysql41);
+						sqlstr.AddSprintf("'%s'", escapestr.GetString());
+						free(escapebuf);
+						escapebuf = NULL;
+					}
+				}
+			}
+			sqlstr.Add(");\r\n");
+		}
+		else
+		{
+			// build UPDATE statement
+			// UPDATE `db`.`table` SET `col1`='val1', `col2`='val2' WHERE `pkcol1`='pkval1' AND ...;
+			sqlstr.Sprintf("UPDATE `%s` SET ", tablename.GetString());
+
+			wyBool firstset = wyTrue;
+
+			if(pkcount > 0)
+			{
+				// SET clause: non-PK columns
+				for(i = 0; i < numfields; i++)
+				{
+					if(iscolumnprimary[i])
+						continue;
+
+					if(!firstset)
+						sqlstr.Add(", ");
+					firstset = wyFalse;
+
+					GetColumnName(colname, (wyInt32)i);
+					sqlstr.AddSprintf("`%s`=", colname.GetString());
+
+					if(!myrow[i])
+					{
+						sqlstr.Add("NULL");
+					}
+					else
+					{
+						if(escapebuf)
+							free(escapebuf);
+						escapebuf = (wyChar*)malloc((length[i] * 2) + 1);
+						if(escapebuf)
+						{
+							m_wnd->m_tunnel->mysql_real_escape_string(m_wnd->m_mysql, escapebuf, myrow[i], length[i]);
+							escapestr.SetAs(escapebuf, m_wnd->m_ismysql41);
+							sqlstr.AddSprintf("'%s'", escapestr.GetString());
+							free(escapebuf);
+							escapebuf = NULL;
+						}
+					}
+				}
+
+				// WHERE clause: PK columns
+				sqlstr.Add(" WHERE ");
+				wyBool firstwhere = wyTrue;
+				for(i = 0; i < numfields; i++)
+				{
+					if(!iscolumnprimary[i])
+						continue;
+
+					if(!firstwhere)
+						sqlstr.Add(" AND ");
+					firstwhere = wyFalse;
+
+					GetColumnName(colname, (wyInt32)i);
+					sqlstr.AddSprintf("`%s`=", colname.GetString());
+
+					if(!myrow[i])
+					{
+						sqlstr.Add("NULL");
+					}
+					else
+					{
+						if(escapebuf)
+							free(escapebuf);
+						escapebuf = (wyChar*)malloc((length[i] * 2) + 1);
+						if(escapebuf)
+						{
+							m_wnd->m_tunnel->mysql_real_escape_string(m_wnd->m_mysql, escapebuf, myrow[i], length[i]);
+							escapestr.SetAs(escapebuf, m_wnd->m_ismysql41);
+							sqlstr.AddSprintf("'%s'", escapestr.GetString());
+							free(escapebuf);
+							escapebuf = NULL;
+						}
+					}
+				}
+			}
+			else
+			{
+				// no primary key: SET all columns, WHERE all columns
+				// SET clause
+				for(i = 0; i < numfields; i++)
+				{
+					if(!firstset)
+						sqlstr.Add(", ");
+					firstset = wyFalse;
+
+					GetColumnName(colname, (wyInt32)i);
+					sqlstr.AddSprintf("`%s`=", colname.GetString());
+
+					if(!myrow[i])
+					{
+						sqlstr.Add("NULL");
+					}
+					else
+					{
+						if(escapebuf)
+							free(escapebuf);
+						escapebuf = (wyChar*)malloc((length[i] * 2) + 1);
+						if(escapebuf)
+						{
+							m_wnd->m_tunnel->mysql_real_escape_string(m_wnd->m_mysql, escapebuf, myrow[i], length[i]);
+							escapestr.SetAs(escapebuf, m_wnd->m_ismysql41);
+							sqlstr.AddSprintf("'%s'", escapestr.GetString());
+							free(escapebuf);
+							escapebuf = NULL;
+						}
+					}
+				}
+
+				// WHERE clause: all columns
+				sqlstr.Add(" WHERE ");
+				wyBool firstwhere = wyTrue;
+				for(i = 0; i < numfields; i++)
+				{
+					if(!firstwhere)
+						sqlstr.Add(" AND ");
+					firstwhere = wyFalse;
+
+					GetColumnName(colname, (wyInt32)i);
+
+					if(!myrow[i])
+					{
+						sqlstr.AddSprintf("`%s` IS NULL", colname.GetString());
+					}
+					else
+					{
+						if(escapebuf)
+							free(escapebuf);
+						escapebuf = (wyChar*)malloc((length[i] * 2) + 1);
+						if(escapebuf)
+						{
+							m_wnd->m_tunnel->mysql_real_escape_string(m_wnd->m_mysql, escapebuf, myrow[i], length[i]);
+							escapestr.SetAs(escapebuf, m_wnd->m_ismysql41);
+							sqlstr.AddSprintf("`%s`='%s'", colname.GetString(), escapestr.GetString());
+							free(escapebuf);
+							escapebuf = NULL;
+						}
+					}
+				}
+			}
+			sqlstr.Add(";\r\n");
+		}
+
+		// write sqlstr to the wide char buffer
+		sqlstr.GetAsWideChar(&lenwchar);
+
+		// verify memory
+		if((nsize + lenwchar + 1) * sizeof(wyWChar) > totallen)
+		{
+			totallen = (nsize + lenwchar + 4096) * sizeof(wyWChar);
+			GlobalUnlock(hglbcopy);
+			hglbcopy = GlobalReAlloc(hglbcopy, totallen, GMEM_MOVEABLE | GMEM_ZEROINIT);
+			if(!hglbcopy)
+			{
+				free(iscolumnprimary);
+				if(escapebuf)
+					free(escapebuf);
+				return NULL;
+			}
+			lpstrcopy = (LPWSTR)GlobalLock(hglbcopy);
+		}
+
+		wmemcpy(lpstrcopy + nsize, sqlstr.GetAsWideChar(), lenwchar);
+		nsize += lenwchar;
+
+		if(copyselectedrow == wyTrue)
+			break;
+	}
+
+	if(escapebuf)
+		free(escapebuf);
+	free(iscolumnprimary);
+
+	if(nsize == 0)
+	{
+		GlobalUnlock(hglbcopy);
+		GlobalFree(hglbcopy);
+		return NULL;
+	}
+
+	// null-terminate
+	lpstrcopy[nsize] = 0;
+
+	// shrink to fit
+	hglbcopy = GlobalReAlloc(hglbcopy, (nsize + 1) * sizeof(wyWChar), GMEM_MOVEABLE | GMEM_ZEROINIT);
+	VERIFY((GlobalUnlock(hglbcopy)) == NO_ERROR);
+
+	return hglbcopy;
+}
+
 //function to set the value of the current selected cell
 void
 DataView::SetValue(wyChar* value, wyBool isupdateformview)
@@ -8231,6 +8741,10 @@ DataView::SetCopyMenu(HMENU hmenu, wyInt32 row, wyInt32 col)
         EnableMenuItem(hmenu, IDM_IMEX_EXPORTCELL, MF_GRAYED);
         EnableMenuItem(hmenu, IDM_DATATOCLIPBOARD, MF_GRAYED);
         EnableMenuItem(hmenu, IDM_SELDATATOCLIPBOARD, MF_GRAYED);
+        EnableMenuItem(hmenu, IDM_COPY_ALL_ROWS_INSERT, MF_GRAYED);
+        EnableMenuItem(hmenu, IDM_COPY_ALL_ROWS_UPDATE, MF_GRAYED);
+        EnableMenuItem(hmenu, IDM_COPY_SEL_ROWS_INSERT, MF_GRAYED);
+        EnableMenuItem(hmenu, IDM_COPY_SEL_ROWS_UPDATE, MF_GRAYED);
     }
     else
     {
@@ -8242,6 +8756,16 @@ DataView::SetCopyMenu(HMENU hmenu, wyInt32 row, wyInt32 col)
 
         //disable if there is no data
         EnableMenuItem(hmenu, IDM_DATATOCLIPBOARD, (!m_data->m_rowarray->GetLength()) ? MF_GRAYED : MF_ENABLED);
+
+        //copy as INSERT/UPDATE: all rows - same as DATATOCLIPBOARD
+        wyBool hasrows = (m_data->m_rowarray->GetLength()) ? wyTrue : wyFalse;
+        EnableMenuItem(hmenu, IDM_COPY_ALL_ROWS_INSERT, hasrows ? MF_ENABLED : MF_GRAYED);
+        EnableMenuItem(hmenu, IDM_COPY_ALL_ROWS_UPDATE, hasrows ? MF_ENABLED : MF_GRAYED);
+
+        //copy as INSERT/UPDATE: selected rows - same as SELDATATOCLIPBOARD
+        wyBool hassel = (row >= 0 || m_data->m_checkcount) ? wyTrue : wyFalse;
+        EnableMenuItem(hmenu, IDM_COPY_SEL_ROWS_INSERT, hassel ? MF_ENABLED : MF_GRAYED);
+        EnableMenuItem(hmenu, IDM_COPY_SEL_ROWS_UPDATE, hassel ? MF_ENABLED : MF_GRAYED);
     }
 }
 
