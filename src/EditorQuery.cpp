@@ -152,6 +152,15 @@ EditorQuery::ExecuteAllQuery(wyInt32 *stop)
 	*stop = wyFalse;
 	wnd->m_lastfocus = m_hwnd;
 
+	// Ensure the connection session points to the correct database before
+	// launching the execution thread.  See comment in ExecuteCurrentQuery.
+	if(wnd->m_pcqueryobject->SyncObjectDB(wnd) == wyFalse)
+	{
+		wnd->m_pcquerystatus->ShowInformation(_(L"Failed to select database"));
+		wnd->SetExecuting(wyFalse);
+		return wyFalse;
+	}
+
 	ExecuteQueryThread(query.GetString(), stop, wnd, curline);
 
 	return wyTrue;
@@ -225,18 +234,32 @@ EditorQuery::ExecuteExplainQuery(wyInt32 * stop, wyBool isExtended)
 
     tmpmysql = &wnd->m_stopmysql;
 
-    param->linenum = curline, 
+    // Ensure the connection session points to the correct database before
+    // launching the execution thread.  See comment in ExecuteCurrentQuery.
+    if(wnd->m_pcqueryobject->SyncObjectDB(wnd) == wyFalse)
+    {
+        wnd->m_pcquerystatus->ShowInformation(_(L"Failed to select database"));
+        wnd->SetExecuting(wyFalse);
+        delete query;
+        delete list;
+        delete str;
+        delete err;
+        delete param;
+        return wyFalse;
+    }
+
+    param->linenum = curline,
     param->query = query;
-    param->stop = stop; 
-    param->list = list; 
+    param->stop = stop;
+    param->list = list;
     param->str = str;
 
 	param->tab = wnd->GetActiveTabEditor()->m_pctabmgmt;
-    param->tunnel = wnd->m_tunnel; 
-    param->mysql = &wnd->m_mysql; 
-	param->tmpmysql = tmpmysql; 
-    param->error = err; 
-    param->isadvedit = wyFalse; 
+    param->tunnel = wnd->m_tunnel;
+    param->mysql = &wnd->m_mysql;
+	param->tmpmysql = tmpmysql;
+    param->error = err;
+    param->isadvedit = wyFalse;
     param->lpcs = &wnd->m_cs;
     param->wnd  = wnd;
 	param->isprofile = wyTrue;
@@ -247,11 +270,11 @@ EditorQuery::ExecuteExplainQuery(wyInt32 * stop, wyBool isExtended)
 	param->isedit = wyFalse;
 	param->isexplainextended = isExtended;
 	param->isexplain = wyTrue;
-	
+
     InitializeExecution(param);
 
 	evt = thd.Execute(param);
-	
+
 	return wyTrue;
 }
 //Function executes the current query. i.e the query in which
@@ -313,11 +336,30 @@ EditorQuery::ExecuteCurrentQuery(wyInt32 * stop, wyBool isedit)
 
 	/* set the flag to executing */
 	wnd->SetExecuting(wyTrue);
-	
+
 	*stop   =  wyFalse;
 	wnd->m_stopmysql=  wnd->m_mysql;
 
     tmpmysql = &wnd->m_stopmysql;
+
+    // Ensure the connection session points to the correct database before
+    // launching the execution thread.  SyncObjectDB is normally called when
+    // the user selects a node in the object browser, but the connection's
+    // actual DB can drift if a reconnect or other path changed it without
+    // updating m_database.  Calling it here guarantees correctness at the
+    // small cost of one extra round-trip only when the names differ.
+    // IMPORTANT: This must complete before ExecuteQueryThread launches the
+    // background thread, since both use wnd->m_mysql.
+    if(wnd->m_pcqueryobject->SyncObjectDB(wnd) == wyFalse)
+    {
+        wnd->m_pcquerystatus->ShowInformation(_(L"Failed to select database"));
+        wnd->SetExecuting(wyFalse);
+        delete str;
+        delete query;
+        delete list;
+        delete err;
+        return wyFalse;
+    }
 
     param					= new QUERYTHREADPARAMS;
 

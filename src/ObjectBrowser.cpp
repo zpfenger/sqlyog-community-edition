@@ -6023,13 +6023,18 @@ CQueryObject::SyncObjectDB(MDIWindow* wnd)
 	wyString  query;
     MYSQL_RES *res;
 
+	if(m_seldatabase.GetLength() == 0)
+		return wyTrue;
+
+	// Always execute USE when the names differ, to guarantee the connection
+	// session points to the correct database before any subsequent query.
 	if(strcmp(wnd->m_database.GetString(), m_seldatabase.GetString()) != 0)
     {
-		if(m_seldatabase.GetLength() == 0)
-			return wyTrue;
-
 		query.Sprintf("use `%s`", m_seldatabase.GetString());
         res = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query);
+        if(!res && wnd->m_tunnel->mysql_affected_rows(wnd->m_mysql) == -1)
+            return wyFalse;
+
         if(res)
             wnd->m_tunnel->mysql_free_result(res);
 
@@ -6037,8 +6042,8 @@ CQueryObject::SyncObjectDB(MDIWindow* wnd)
         wnd->m_conninfo.m_db.SetAs(m_seldatabase.GetString());
 	    pGlobals->m_pcmainwin->AddTextInCombo(m_seldatabase.GetAsWideChar());
         wnd->m_acinterface->HandlerStoreObjects(wnd, wyTrue);
-	} 
-	
+	}
+
 	return wyTrue;
 }
 
@@ -6048,13 +6053,16 @@ CQueryObject::SyncObjectDBNocombo(MDIWindow* wnd)
 	wyString  query;
     MYSQL_RES *res;
 
+	if(m_seldatabase.GetLength() == 0)
+		return wyTrue;
+
 	if(strcmp(wnd->m_database.GetString(), m_seldatabase.GetString()) != 0)
     {
-		if(m_seldatabase.GetLength() == 0)
-			return wyTrue;
-
 		query.Sprintf("use `%s`", m_seldatabase.GetString());
         res = ExecuteAndGetResult(wnd, wnd->m_tunnel, &wnd->m_mysql, query);
+        if(!res && wnd->m_tunnel->mysql_affected_rows(wnd->m_mysql) == -1)
+            return wyFalse;
+
         if(res)
             wnd->m_tunnel->mysql_free_result(res);
 
@@ -6062,8 +6070,8 @@ CQueryObject::SyncObjectDBNocombo(MDIWindow* wnd)
         wnd->m_conninfo.m_db.SetAs(m_seldatabase.GetString());
 	    //pGlobals->m_pcmainwin->AddTextInCombo(m_seldatabase.GetAsWideChar());
         wnd->m_acinterface->HandlerStoreObjects(wnd, wyTrue);
-	} 
-	
+	}
+
 	return wyTrue;
 }
 

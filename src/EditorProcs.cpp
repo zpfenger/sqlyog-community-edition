@@ -172,6 +172,15 @@ EditorProcs::ExecuteAllQuery(wyInt32 * stop)
 	wnd->SetExecuting(wyTrue);
 	*stop = 0;
 
+	// Ensure the connection session points to the correct database before
+	// launching the execution thread.  See comment in EditorQuery::ExecuteCurrentQuery.
+	if(wnd->m_pcqueryobject->SyncObjectDB(wnd) == wyFalse)
+	{
+		wnd->m_pcquerystatus->ShowInformation(_(L"Failed to select database"));
+		wnd->SetExecuting(wyFalse);
+		return wyFalse;
+	}
+
 	ExecuteQueryThread(query.GetString(), stop, wnd, curline, wyTrue);
 
 	return wyTrue;

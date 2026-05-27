@@ -1987,9 +1987,16 @@ MDIWindow::StopQuery()
 		return wyFalse;
 	}
 	
-	UseDatabase(currentdatabase, mysql, m_tunnel);
-	
-	
+	// After reconnecting with the correct database, update m_database so
+	// that autocomplete and subsequent SyncObjectDB calls see the right value.
+	// Only update on success to avoid m_database claiming a DB the connection
+	// is not actually using.
+	if(currentdatabase.GetLength() && UseDatabase(currentdatabase, mysql, m_tunnel) == wyTrue)
+	{
+		m_database.SetAs(currentdatabase.GetString());
+		m_conninfo.m_db.SetAs(currentdatabase.GetString());
+	}
+
     if(m_tunnel->IsTunnel()&& !m_tunnel->CheckCorrectTunnelVersion(mysql))
     {
         ShowMySQLError(m_hwnd, m_tunnel, &temp, NULL, wyTrue);
@@ -4582,6 +4589,14 @@ MDIWindow::ReConnect(Tunnel * tunnel, PMYSQL mysql, wyBool isssh, wyBool isimpor
 	
 	if(isprofile == wyTrue && currentdb.GetLength() &&  UseDatabase(currentdb, *mysql, tunnel) == wyFalse)
 		return wyFalse;
+
+	// After reconnecting with the correct database, update m_database so
+	// that autocomplete and subsequent SyncObjectDB calls see the right value.
+	if(isprofile == wyTrue && currentdb.GetLength())
+	{
+		m_database.SetAs(currentdb.GetString());
+		m_conninfo.m_db.SetAs(currentdb.GetString());
+	}
 
 	if (m_conninfo.m_isazuredb) {
 		m_conninfo.m_connection_id = GetConnectionId(tunnel, *mysql);
