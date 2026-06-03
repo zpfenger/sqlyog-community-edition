@@ -1352,9 +1352,9 @@ DataView::GenerateDeleteQuery(wyString& query, wyBool issetlimit, wyUInt32 row)
 	    for(i = 0; i < m_data->m_datares->field_count ; i++)
         {
             GetColumnName(colname, i);
-		
+
             //if it is primary key column
-		    if(IsColumnPrimary(m_wnd->m_tunnel, m_data->m_fieldres, (wyChar*)colname.GetString()) == wyTrue)
+		    if(IsColumnPrimaryKey(m_wnd->m_tunnel, m_data->m_keyres, (wyChar*)colname.GetString()) == wyTrue)
 		    {
                 //if the row is modified but not saved, then we will consider the old data otherwise current data
                 if(m_data->m_modifiedrow >= 0 && row == m_data->m_modifiedrow)
@@ -1472,8 +1472,8 @@ DataView::GenerateUpdateQuery(wyString &query, wyBool issetlimit)
 	    for(isfirst = wyTrue, i = 0; i < m_data->m_datares->field_count; i++)
         {
             GetColumnName(colname, i);
-            isprimary = IsColumnPrimary(m_wnd->m_tunnel, m_data->m_fieldres, (wyChar*)colname.GetString());
-		
+            isprimary = IsColumnPrimaryKey(m_wnd->m_tunnel, m_data->m_keyres, (wyChar*)colname.GetString());
+
 		    if(isprimary)
 		    {
                 isfirst = AddDataToQuery(m_data->m_oldrow->m_row, tempstr, "and ", "is null", i, isfirst) ? --pkcount, wyFalse : wyTrue;
@@ -6790,7 +6790,7 @@ DataView::GetSQLData(wyBool selected, wyBool isinsert)
 		for(i = 0; i < numfields; i++)
 		{
 			GetColumnName(colname, (wyInt32)i);
-			if(colname.GetLength() && IsColumnPrimary(m_wnd->m_tunnel, m_data->m_fieldres, (wyChar*)colname.GetString()) == wyTrue)
+			if(colname.GetLength() && IsColumnPrimaryKey(m_wnd->m_tunnel, m_data->m_keyres, (wyChar*)colname.GetString()) == wyTrue)
 			{
 				iscolumnprimary[i] = wyTrue;
 			}
@@ -7267,7 +7267,7 @@ DataView::UpdateRow()
         {
             GetColumnName(colname, i);
 
-            if(IsColumnPrimary(m_wnd->m_tunnel, m_data->m_fieldres, (wyChar*)colname.GetString()) == wyTrue)
+            if(IsColumnPrimaryKey(m_wnd->m_tunnel, m_data->m_keyres, (wyChar*)colname.GetString()) == wyTrue)
             {
                 pkcount--;
             }
@@ -7523,7 +7523,7 @@ DataView::DeleteRow(wyInt32 row, wyInt32& response)
         {
             GetColumnName(colname, i);
 
-            if(IsColumnPrimary(m_wnd->m_tunnel, m_data->m_fieldres, (wyChar*)colname.GetString()) == wyTrue)
+            if(IsColumnPrimaryKey(m_wnd->m_tunnel, m_data->m_keyres, (wyChar*)colname.GetString()) == wyTrue)
             {
                 pkcount--;
             }

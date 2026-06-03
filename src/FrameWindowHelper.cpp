@@ -2529,6 +2529,37 @@ IsAnyPrimary(Tunnel * m_tunnel, MYSQL_RES * mykeyres, wyInt32 * pcount)
 	return count ? wyTrue : wyFalse;
 }
 
+// function checks if a column is part of primary key using show keys result
+wyBool
+IsColumnPrimaryKey(Tunnel *tunnel, MYSQL_RES *mykeyres, wyChar *column)
+{
+    wyUInt32    count;
+    wyInt32     keynameidx, colnameidx;
+    MYSQL_ROW	myrow;
+
+    if(!mykeyres)
+        return wyFalse;
+
+    keynameidx = GetFieldIndex(mykeyres, "key_name", tunnel);
+    colnameidx = GetFieldIndex(mykeyres, "column_name", tunnel);
+
+    if(keynameidx < 0 || colnameidx < 0)
+        return wyFalse;
+
+    for(count = 0; count < mykeyres->row_count; count++)
+    {
+        tunnel->mysql_data_seek(mykeyres, count);
+        myrow = tunnel->mysql_fetch_row(mykeyres);
+
+        if(myrow[keynameidx] && myrow[colnameidx] &&
+           stricmp(myrow[keynameidx], "primary") == 0 &&
+           stricmp(column, myrow[colnameidx]) == 0)
+            return wyTrue;
+    }
+
+    return wyFalse;
+}
+
 // function searches for the column name in the key res and finds if its part of a primary key column
 wyBool
 IsColumnPrimary(Tunnel *tunnel, MYSQL_RES *myfieldres, wyChar *column)

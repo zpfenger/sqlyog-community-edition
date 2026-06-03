@@ -996,6 +996,15 @@ IsFieldVirtual(Tunnel *tunnel, MYSQL_RES *myfieldres, wyString& column);
 */
 wyBool		IsAnyPrimary(Tunnel * tunnel, MYSQL_RES * mykeyres, wyInt32 * pcount = NULL);
 
+/// Checks if a column is part of primary key using show keys result.
+/**
+@param tunnel				: IN Tunnel pointer.
+@param mykeyres				: IN Mysql result from show keys.
+@param column				: IN Column name.
+@returns wyTrue if primary else wyFalse
+*/
+wyBool		IsColumnPrimaryKey(Tunnel *tunnel, MYSQL_RES *mykeyres, wyChar *column);
+
 /// Checks if a field can be made null.
 /**
 @param tunnel				: IN Tunnel pointer.
