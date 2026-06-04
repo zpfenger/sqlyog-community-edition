@@ -737,6 +737,7 @@ BEGIN
             MENUITEM "&Export Connection Details...", ID_EXPORT_EXPORTCONNECTIONDETAILS
             MENUITEM "&Import Connection Details...", ID_EXPORT_IMPORTCONNECTIONDETAILS
         END
+        MENUITEM "AI &Settings...",             ID_TOOLS_AISETTINGS
         MENUITEM "&Preferences...",             IDC_PREF
     END
     // [Community] Disabled: entire Powertools menu is ENT-only
@@ -1843,6 +1844,23 @@ BEGIN
     DEFPUSHBUTTON   "&OK",ID_OK,231,183,50,16
 END
 
+IDD_AISETTINGS DIALOGEX 0, 0, 320, 160
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "AI Settings"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    LTEXT           "API URL:",IDC_STATIC_URL_LABEL,10,12,50,10
+    EDITTEXT        IDC_AI_URL,65,10,240,14,ES_AUTOHSCROLL
+    LTEXT           "API Key:",IDC_STATIC_KEY_LABEL,10,32,50,10
+    EDITTEXT        IDC_AI_KEY,65,30,240,14,ES_AUTOHSCROLL | ES_PASSWORD
+    LTEXT           "Model:",IDC_STATIC_MODEL_LABEL,10,52,50,10
+    EDITTEXT        IDC_AI_MODEL,65,50,240,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "Test",IDC_AI_TESTBTN,10,72,40,14
+    LTEXT           "",IDC_AI_STATUS,60,75,240,10
+    DEFPUSHBUTTON   "OK",IDOK,200,100,50,14
+    PUSHBUTTON      "Cancel",IDCANCEL,255,100,50,14
+END
+
 // [Community] Disabled: Get Enterprise/Ultimate dialog
 /*
 IDD_GETSQLYOGENTERPRISE DIALOGEX 0, 0, 328, 74
@@ -2665,6 +2683,8 @@ IDI_EXPORTDATA_16       ICON                    "bitmaps\\export_data_16.ico"
 IDI_QUERYBUILDER_16     ICON                    "bitmaps\\querybuilder_16.ico"
 
 IDI_QUERY_16            ICON                    "bitmaps\\query_16.ico"
+
+IDI_AIASSISTANT         ICON                    "bitmaps\\query_16.ico"
 
 IDI_RENAMEQUERY_16      ICON                    "bitmaps\\renamequery_16.ico"
 

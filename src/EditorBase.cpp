@@ -1,4 +1,4 @@
-/* Copyright (C) 2013 Webyog Inc
+﻿/* Copyright (C) 2013 Webyog Inc
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -28,7 +28,9 @@
 #include "GUIHelper.h"
 #include "QueryThread.h"
 #include "commonhelper.h"
+#include "resource.h"
 #include "TabEditorSplitter.h"
+#include "L10nText.h"
 
 extern	PGLOBALS		pGlobals;
 
@@ -617,6 +619,21 @@ EditorBase::OnContextMenuHelper(LPARAM lParam)
         if(wnd->m_executing == wyTrue || wnd->m_pingexecuting == wyTrue)
         {
             FrameWindow::RecursiveMenuEnable(htrackmenu, wyFalse, MF_DISABLED);
+        }
+
+        // Append AI menu items (only if not already added)
+        if (GetMenuState(htrackmenu, ID_AI_ANALYZE, MF_BYCOMMAND) == (UINT)-1) {
+            AppendMenu(htrackmenu, MF_SEPARATOR, 0, NULL);
+            // Use Chinese menu text if language is Chinese
+            const char* langcode = GetL10nLangcode();
+            bool isChinese = (langcode && (strcmp(langcode, "zh-cn") == 0 || strcmp(langcode, "zh") == 0));
+            if (isChinese) {
+                AppendMenu(htrackmenu, MF_STRING, ID_AI_ANALYZE,  L"AI 分析(&A)");
+                AppendMenu(htrackmenu, MF_STRING, ID_AI_BEAUTIFY, L"AI 美化(&B)");
+            } else {
+                AppendMenu(htrackmenu, MF_STRING, ID_AI_ANALYZE,  _(L"AI &Analyze"));
+                AppendMenu(htrackmenu, MF_STRING, ID_AI_BEAUTIFY, _(L"AI &Beautify"));
+            }
         }
 
         wyTheme::SetMenuItemOwnerDraw(htrackmenu);

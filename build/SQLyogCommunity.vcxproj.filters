@@ -18,6 +18,12 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\AIService.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\AISettingsDlg.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\AutoCompleteInterface.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -213,6 +219,9 @@
     <ClCompile Include="..\src\TabHistory.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\TabAI.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\TabMessage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -356,6 +365,12 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\AIService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\AISettingsDlg.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\include\AppInfo.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -558,6 +573,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\StatusbarMgmt.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\TabAI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\include\TabEditor.h">

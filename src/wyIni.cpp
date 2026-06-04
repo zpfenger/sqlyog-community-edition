@@ -581,14 +581,21 @@ wyIni::LoadFile(const wyChar *filename, const wyChar* secname, const wyChar* key
 		else
 		{
 			if(GetLastError() == ERROR_FILE_NOT_FOUND)
-			{				
+			{
 				m_errormsg = "open file error";
 
-				return wyFalse;				
+				return wyFalse;
+			}
+
+			if(trycount == 0)
+			{
+				wyChar dbgmsg[1024];
+				sprintf(dbgmsg, "Failed to open: %s\nError code: %lu", filename, GetLastError());
+				MessageBoxA(NULL, dbgmsg, "SQLyog Debug", MB_OK);
 			}
 
 			Sleep(FILE_LOCK_WAIT);
-			trycount++;	
+			trycount++;
 		}
 
 	}while(trycount <= FILE_LOCK_WAIT_TRY_COUNT);

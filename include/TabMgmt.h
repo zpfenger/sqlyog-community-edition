@@ -28,6 +28,7 @@
 #include "TabTable.h"
 #include "TabQueryHistory.h"
 #include "TabQueryObject.h"
+#include "TabAI.h"
 
 class CQueryInfo;
 class QueryAnalyzerBase;
@@ -130,6 +131,8 @@ public:
     void        AddHistoryTab();
 
     void        AddInfoTab();
+
+    void        AddAITab();
     
 	//Add Query Analyzer tab 
 	/**
@@ -192,6 +195,8 @@ public:
     TabQueryHistory* m_phistory;
 
     TabQueryObject* m_pqueryobj;
+
+    TabAI*      m_paitab;
 
 	/// pointer to message viewer
 	TabMessage   *m_pcquerymessageedit;

@@ -255,6 +255,8 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\AIService.cpp" />
+    <ClCompile Include="..\src\AISettingsDlg.cpp" />
     <ClCompile Include="..\src\Announcements.cpp" />
     <ClCompile Include="..\src\AutoCompleteInterface.cpp" />
     <ClCompile Include="..\src\CommunityAutoComplete.cpp" />
@@ -354,6 +356,7 @@
     <ClCompile Include="..\src\TabForeignKeys.cpp" />
     <ClCompile Include="..\src\TabHistory.cpp" />
     <ClCompile Include="..\src\TabIndexes.cpp" />
+    <ClCompile Include="..\src\TabAI.cpp" />
     <ClCompile Include="..\src\TableTabInterface.cpp" />
     <ClCompile Include="..\src\TableTabInterfaceTabMgmt.cpp" />
     <ClCompile Include="..\src\TableView.cpp" />
@@ -399,6 +402,8 @@
     <ClCompile Include="RegisterEmail.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\AIService.h" />
+    <ClInclude Include="..\include\AISettingsDlg.h" />
     <ClInclude Include="..\include\Announcements.h" />
     <ClInclude Include="..\include\AppInfo.h" />
     <ClInclude Include="..\include\AutoCompleteInterface.h" />
@@ -482,6 +487,7 @@
     <ClInclude Include="..\include\SQLTokenizer.h" />
     <ClInclude Include="..\include\StatusbarMgmt.h" />
     <ClInclude Include="..\include\Symbols.h" />
+    <ClInclude Include="..\include\TabAI.h" />
     <ClInclude Include="..\include\TabAdvancedProperties.h" />
     <ClInclude Include="..\include\TabCheck.h" />
     <ClInclude Include="..\include\TabEditor.h" />

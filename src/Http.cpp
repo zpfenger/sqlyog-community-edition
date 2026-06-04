@@ -49,6 +49,7 @@ CHttp::CHttp ()
 	m_Port = 0;
 
 	m_contenttype = NULL;
+	m_customheader = NULL;
 
 	m_proxyport = 0;
 	m_isproxy = false;
@@ -145,6 +146,7 @@ CHttp::~CHttp ()
 	if (m_FileName ) delete[] m_FileName;
 
 	if(m_contenttype) delete[] m_contenttype;
+	if(m_customheader) delete[] m_customheader;
 
 	if (m_proxy ) delete[] m_proxy;
 	if (m_proxyuser ) delete[] m_proxyuser;
@@ -235,13 +237,28 @@ CHttp::SetChallengeInfo (bool challenge, const wyWChar * username, const wyWChar
 	return true;
 }
 
-bool				
+bool
 CHttp::SetContentType(const wyWChar * contenttype)
 {
 	if (m_contenttype ) return wyFalse;
-	
+
 	m_contenttype  = new wyWChar[wcslen(contenttype) + 1];
 	wcscpy (m_contenttype , contenttype);
+
+	return true;
+}
+
+bool
+CHttp::SetHeader(const wyWChar * header)
+{
+	if (!header)
+		return false;
+
+	if (m_customheader)
+		delete[] m_customheader;
+
+	m_customheader = new wyWChar[wcslen(header) + 1];
+	wcscpy(m_customheader, header);
 
 	return true;
 }
@@ -446,12 +463,21 @@ CHttp::AllocHandles ( bool isbase64, int *status, bool checkauth)
 	if (!m_HttpOpenRequest )
 		return false;
 
-	//Content-Type 
+	//Content-Type
 	contenttype.SetAs(m_contenttype);
 	contenttypestr.Sprintf("Content-Type: %s\r\n", contenttype.GetString());
 	if (!HttpAddRequestHeaders(m_HttpOpenRequest, contenttypestr.GetAsWideChar () , (DWORD)-1, HTTP_ADDREQ_FLAG_ADD | HTTP_ADDREQ_FLAG_REPLACE ) )
 		return false;
-				
+
+	// Custom header (e.g. Authorization: Bearer <key>)
+	if (m_customheader) {
+		wyString customstr;
+		customstr.SetAs(m_customheader);
+		wyString hdr;
+		hdr.Sprintf("%s\r\n", customstr.GetString());
+		HttpAddRequestHeaders(m_HttpOpenRequest, hdr.GetAsWideChar(), (DWORD)-1, HTTP_ADDREQ_FLAG_ADD | HTTP_ADDREQ_FLAG_REPLACE);
+	}
+
 	/*if (!HttpAddRequestHeaders(m_HttpOpenRequest, L"HTTP_USER_AGENT: Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.7.5) Gecko/20041107 Firefox/1.0\r\n", (DWORD)-1, HTTP_ADDREQ_FLAG_ADD | HTTP_ADDREQ_FLAG_REPLACE ) )
 		return false;*/
 	//changing user string for avoid update your browser bug
@@ -1166,6 +1192,123 @@ CHttp::GetResponse(bool * stop )
 		return NULL;
 
 	return response;
+}
+
+bool
+CHttp::ReadResponseStreaming(StreamCallback callback, void* userdata, volatile LONG* stop)
+{
+	char        buffer[4096];
+	DWORD       buffersize, downloaded;
+
+	// Line buffer for handling cross-chunk boundaries
+	char*       linebuf = NULL;
+	int         linebuflen = 0;
+	int         linebufcap = 0;
+
+	// Retry tracking for SSE streaming: server may not have data ready immediately
+	int         emptyRetries = 0;
+	const int   MAX_EMPTY_RETRIES = 300;  // 300 * 100ms = 30s max wait between tokens
+
+	if (!callback)
+		return false;
+
+	do {
+		// Check for cancellation
+		if (stop && InterlockedCompareExchange(stop, 0, 0) != 0)
+			break;
+
+		// Query available data
+		if (!InternetQueryDataAvailable(m_HttpOpenRequest, &buffersize, 0, 0)) {
+			if (linebuf) free(linebuf);
+			return false;
+		}
+
+		if (buffersize == 0) {
+			// For SSE streaming: server may send data with delays between tokens.
+			// Don't break immediately - wait and retry.
+			emptyRetries++;
+			if (emptyRetries > MAX_EMPTY_RETRIES) {
+				// No data for too long - connection likely closed
+				break;
+			}
+			Sleep(100);
+			continue;
+		}
+
+		// Got data - reset retry counter
+		emptyRetries = 0;
+
+		// Limit single read size
+		if (buffersize > sizeof(buffer))
+			buffersize = sizeof(buffer);
+
+		// Read chunk
+		if (!yog_InternetReadFile(m_HttpOpenRequest, buffer, buffersize, &downloaded)) {
+			if (linebuf) free(linebuf);
+			return false;
+		}
+
+		if (downloaded == 0)
+			break;
+
+		// Append chunk to line buffer
+		int needed = linebuflen + (int)downloaded + 1;
+		if (needed > linebufcap) {
+			linebufcap = needed + 4096;
+			char* newbuf = (char*)realloc(linebuf, linebufcap);
+			if (!newbuf) {
+				if (linebuf) free(linebuf);
+				return false;
+			}
+			linebuf = newbuf;
+		}
+		memcpy(linebuf + linebuflen, buffer, downloaded);
+		linebuflen += downloaded;
+		linebuf[linebuflen] = '\0';
+
+		// Process complete lines in the buffer
+		int processed = 0;
+		for (int i = 0; i < linebuflen; i++) {
+			if (linebuf[i] == '\n') {
+				// Found a complete line (strip trailing \r if present)
+				int linelen = i - processed;
+				if (linelen > 0 && linebuf[processed + linelen - 1] == '\r')
+					linelen--;
+
+				// Deliver line to callback
+				if (linelen > 0) {
+					if (!callback(linebuf + processed, linelen, userdata)) {
+						free(linebuf);
+						return true;
+					}
+				}
+				processed = i + 1;
+			}
+		}
+
+		// Move unprocessed data to beginning of buffer
+		if (processed > 0) {
+			if (processed < linebuflen) {
+				memmove(linebuf, linebuf + processed, linebuflen - processed);
+				linebuflen -= processed;
+			} else {
+				linebuflen = 0;
+			}
+		}
+	} while (true);
+
+	// Deliver any remaining data in the buffer as the last line
+	if (linebuflen > 0) {
+		int linelen = linebuflen;
+		if (linelen > 0 && linebuf[linelen - 1] == '\r')
+			linelen--;
+		if (linelen > 0) {
+			callback(linebuf, linelen, userdata);
+		}
+	}
+
+	if (linebuf) free(linebuf);
+	return true;
 }
 
 /* function returns all the headers returned by a post.

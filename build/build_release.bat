@@ -17,6 +17,22 @@ for %%P in ("%PATH:;=" "%") do (
 set "PATH=%PATH_NEW%"
 
 cd /d D:\AI\sqlyog-community\build
+
+:: Handle --rebuild flag: force recompile specific .obj files
+if "%1"=="--rebuild" (
+    echo Forcing recompile of wyIni.cpp and FrameWindow.cpp...
+    del /q "x64\Release\SQLyogCommunity\wyIni.obj" 2>nul
+    del /q "x64\Release\SQLyogCommunity\FrameWindow.obj" 2>nul
+)
+
+:: Clean Release output directory
+set "OUT_DIR=..\bin\x64\Release"
+if exist "%OUT_DIR%" (
+    echo Cleaning %OUT_DIR% ...
+    rd /s /q "%OUT_DIR%"
+    mkdir "%OUT_DIR%"
+)
+
 set MSBUILD="E:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
 echo Building SQLyog Community x64 Release...
 %MSBUILD% SQLyogCommunity.sln /p:Configuration=Release /p:Platform=x64 /t:Build /m:1 /nodeReuse:false /v:minimal > build_full_log.txt 2>&1
@@ -29,7 +45,6 @@ echo ========================================
 echo Copying runtime DLLs to output...
 echo ========================================
 
-set "OUT_DIR=..\bin\x64\Release"
 set "DLL_SRC=..\lib\x64\release"
 
 :: MySQL connector / SSL / crypto DLLs
@@ -38,12 +53,14 @@ copy /Y "%DLL_SRC%\libssl-3-x64.dll"      "%OUT_DIR%\" >nul
 copy /Y "%DLL_SRC%\libeay32.dll"           "%OUT_DIR%\" >nul
 copy /Y "%DLL_SRC%\ssleay32.dll"           "%OUT_DIR%\" >nul
 copy /Y "%DLL_SRC%\msvcr120.dll"           "%OUT_DIR%\" >nul
+copy /Y "%DLL_SRC%\vcruntime140.dll"       "%OUT_DIR%\" >nul
 
 :: MySQL authentication plugins
 copy /Y "%DLL_SRC%\caching_sha2_password.dll"  "%OUT_DIR%\" >nul
 copy /Y "%DLL_SRC%\client_ed25519.dll"        "%OUT_DIR%\" >nul
 copy /Y "%DLL_SRC%\sha256_password.dll"       "%OUT_DIR%\" >nul
 copy /Y "%DLL_SRC%\auth_gssapi_client.dll"    "%OUT_DIR%\" >nul
+copy /Y "%DLL_SRC%\mysql_clear_password.dll"  "%OUT_DIR%\" >nul
 
 :: MySQL pipe/shmem virtual IO
 copy /Y "%DLL_SRC%\pvio_npipe.dll"          "%OUT_DIR%\" >nul

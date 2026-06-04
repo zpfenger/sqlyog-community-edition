@@ -1668,6 +1668,24 @@
 #define IDC_AUTHPLUGIN					44145
 #define IDR_THEME_DARK					44146
 
+// AI Feature
+#define IDD_AISETTINGS          44150
+#define IDI_AIASSISTANT         44151
+#define IDC_AI_URL              44152
+#define IDC_AI_KEY              44153
+#define IDC_AI_MODEL            44154
+#define IDC_AI_TESTBTN          44155
+#define IDC_AI_INPUT            44156
+#define IDC_AI_SENDBTN          44157
+#define IDC_AI_CLEARBTN         44158
+#define IDC_AI_STATUS           44159
+#define IDC_AI_DISPLAY          44160
+#define ID_TOOLS_AISETTINGS     41829
+#define ID_AI_ANALYZE           41830
+#define ID_AI_BEAUTIFY          41831
+#define IDC_STATIC_URL_LABEL    44161
+#define IDC_STATIC_KEY_LABEL    44162
+#define IDC_STATIC_MODEL_LABEL  44163
 
 // Next default values for new objects
 // 

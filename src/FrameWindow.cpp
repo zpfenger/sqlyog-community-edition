@@ -61,6 +61,9 @@
 #include "Http.h"
 #include "htmlayout.h"
 #include "TabCheck.h"
+#include "AISettingsDlg.h"
+#include "TabAI.h"
+#include "L10nText.h"
 
 #ifndef COMMUNITY
 #include "RegistrationApi.h"
@@ -364,6 +367,23 @@ FrameWindow::Create()
 		return wyFalse;
 
 	InitSplitterPos(path.GetString());
+
+	// Load AI configuration
+	{
+		wyString val;
+		wyIni::IniGetString("AI", "AIUrl", "", &val, path.GetString());
+		pGlobals->m_aiurl.SetAs(val.GetString());
+
+		wyIni::IniGetString("AI", "AIKey", "", &val, path.GetString());
+		pGlobals->m_aikey.SetAs(val.GetString());
+		// Decrypt the key (stored encrypted in INI)
+		if (pGlobals->m_aikey.GetLength() > 0) {
+			DecodePassword(pGlobals->m_aikey);
+		}
+
+		wyIni::IniGetString("AI", "AIModel", "", &val, path.GetString());
+		pGlobals->m_aimodel.SetAs(val.GetString());
+	}
 
 #ifndef COMMUNITY
 	InitPQAOptions(path.GetString());
@@ -861,6 +881,45 @@ FrameWindow::SetYogMenuOwnerDraw()
     }
 }
 
+// Check if current UI language is Chinese
+static bool IsChineseLanguage()
+{
+    const char* langcode = GetL10nLangcode();
+    return (langcode && (strcmp(langcode, "zh-cn") == 0 || strcmp(langcode, "zh") == 0));
+}
+
+// Localize AI-related menu items that may not be in the L10n database yet.
+// Uses Unicode escape sequences to avoid encoding issues with MSVC (source is UTF-8 without BOM).
+static void LocalizeAIMenus(HMENU hmenu)
+{
+    if (!IsChineseLanguage())
+        return;
+
+    HMENU htoolsMenu = GetSubMenu(hmenu, MNUTOOL_INDEX - 1);
+    if (!htoolsMenu)
+        return;
+
+    MENUITEMINFO mii = {0};
+    mii.cbSize = sizeof(MENUITEMINFO);
+    mii.fMask = MIIM_STRING;
+
+    // Find and translate "AI &Settings..."
+    int count = GetMenuItemCount(htoolsMenu);
+    for (int i = 0; i < count; i++) {
+        wyWChar buf[256] = {0};
+        mii.dwTypeData = buf;
+        mii.cch = 255;
+        GetMenuItemInfo(htoolsMenu, i, TRUE, &mii);
+
+        if (wcsstr(buf, L"AI") && wcsstr(buf, L"Settings")) {
+            // "AI 设置(&S)..." - Chinese characters as Unicode escapes
+            static wyWChar szAISettings[] = { 'A','I',' ',0x8BBE,0x7F6E,'(','&','S',')','.','.','.','.',0 };
+            mii.dwTypeData = szAISettings;
+            SetMenuItemInfo(htoolsMenu, i, TRUE, &mii);
+        }
+    }
+}
+
 // Function creates the main window i.e the main application window.
 wyBool
 FrameWindow::CreateMainWindow(HINSTANCE hinstance)
@@ -893,6 +952,7 @@ FrameWindow::CreateMainWindow(HINSTANCE hinstance)
 	// Show and update the window.
 	
     LocalizeMenu(GetMenu(hwnd));
+    LocalizeAIMenus(GetMenu(hwnd));
     SetYogMenuOwnerDraw();
 	//ShowWindow(hwnd, SW_NORMAL);
 	//VERIFY(ret = UpdateWindow(hwnd));
@@ -3237,7 +3297,56 @@ pGlobals->m_pcmainwin->m_closealltrans = 1;
         }
 
 		break;
-        
+
+    case ID_TOOLS_AISETTINGS:
+        AISettingsDlg::Show(m_hwndmain);
+        break;
+
+    case ID_AI_ANALYZE:
+    case ID_AI_BEAUTIFY:
+    {
+        // Get active MDI window
+        MDIWindow* wnd = GetActiveWin();
+        if (!wnd)
+            break;
+        TabEditor* tab = wnd->GetActiveTabEditor();
+        if (!tab)
+            break;
+        EditorBase* editor = tab->m_peditorbase;
+        if (!editor)
+            break;
+
+        // Get selected text
+        wyString seltext;
+        wyInt32 start = (wyInt32)SendMessage(editor->GetHWND(), SCI_GETSELECTIONSTART, 0, 0);
+        wyInt32 end = (wyInt32)SendMessage(editor->GetHWND(), SCI_GETSELECTIONEND, 0, 0);
+        if (start == end) {
+            // No selection - get all text
+            wyInt32 len = (wyInt32)SendMessage(editor->GetHWND(), SCI_GETTEXTLENGTH, 0, 0);
+            if (len == 0)
+                break;
+            char* buf = (char*)calloc(len + 1, sizeof(char));
+            SendMessage(editor->GetHWND(), SCI_GETTEXT, len + 1, (LPARAM)buf);
+            seltext.SetAs(buf);
+            free(buf);
+        } else {
+            char* buf = (char*)calloc(end - start + 1, sizeof(char));
+            SendMessage(editor->GetHWND(), SCI_GETSELTEXT, 0, (LPARAM)buf);
+            seltext.SetAs(buf);
+            free(buf);
+        }
+
+        if (seltext.GetLength() == 0)
+            break;
+
+        if (tab->m_pctabmgmt && tab->m_pctabmgmt->m_paitab) {
+            const char* action = (LOWORD(wParam) == ID_AI_ANALYZE) ? "analyze" : "beautify";
+            tab->m_pctabmgmt->SelectFixedTab(IDI_AIASSISTANT);
+            tab->m_pctabmgmt->m_paitab->SendSQLToAI(seltext.GetString(), action);
+        }
+        break;
+    }
+
 	case IDC_PREF:
         ManagePreferences();
 		break;
@@ -12421,4 +12530,3 @@ sessionsavesproc(void *arg)
 	}
 
 }
-

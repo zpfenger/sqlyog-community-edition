@@ -32,6 +32,10 @@
 /* Certainly not a generic HTTP protocol but if required can be extended */
 /* This class is very poor in resource management as of now */
 
+// Stream callback for SSE: delivers one complete line per call
+// Return true to continue, false to stop
+typedef bool (*StreamCallback)(const char* line, int lineLen, void* userdata);
+
 typedef struct 
 {
 	HINTERNET				hRequest;
@@ -93,6 +97,7 @@ private:
 	INTERNET_PORT	m_Port;
 
 	wyWChar			*m_contenttype;
+	wyWChar			*m_customheader;   // custom HTTP header (e.g. Authorization)
 
 	/* proxy server information */
 	int				m_proxyport;
@@ -197,7 +202,12 @@ public:
 
 	bool				SetChallengeInfo (bool ischallenge, const wyWChar * username, const wyWChar * pwd );
 	bool				SetContentType(const wyWChar * contenttype);
-		
+	bool				SetHeader(const wyWChar * header);
+
+	// SSE streaming: reads response line by line, calls callback for each complete line
+	// Internally buffers partial lines across TCP chunks
+	bool				ReadResponseStreaming(StreamCallback callback, void* userdata, volatile LONG* stop = NULL);
+
 };
 
 #endif 

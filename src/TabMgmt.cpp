@@ -76,6 +76,7 @@ TabMgmt::TabMgmt(HWND hwndparent, MDIWindow* pmdi)
     m_ptabletab = NULL;
     m_phistory = NULL;
     m_pqueryobj = NULL;
+    m_paitab = NULL;
 }
 
 TabMgmt::~TabMgmt()
@@ -118,7 +119,9 @@ TabMgmt::Create()
     {
         AddHistoryTab();
     }
-    
+
+    AddAITab();
+
     CustomTab_SetClosable(m_hwnd, wyFalse);
 	SetFont();		
 	return wyTrue;
@@ -244,6 +247,10 @@ TabMgmt::WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam, wyBool *
             {
                 ((TabMessage*)pcquerytab->GetActiveTabType())->OnWMCommand(wparam);
             }
+            else if(pcquerytab->GetActiveTabIcon() == IDI_AIASSISTANT)
+            {
+                ((TabAI*)pcquerytab->GetActiveTabType())->OnWMCommand(wparam);
+            }
 
             break;
 	}
@@ -354,7 +361,17 @@ TabMgmt::AddInfoTab()
 
     InsertTab(m_hwnd, count, IDI_TABLEINDEX, message, (LPARAM)m_pqueryobj);
     cursel = CustomTab_GetCurSel(m_hwnd);
-    CustomTab_EnsureVisible(m_hwnd, cursel, wyFalse);    
+    CustomTab_EnsureVisible(m_hwnd, cursel, wyFalse);
+}
+
+void
+TabMgmt::AddAITab()
+{
+    wyString message(_("AI"));
+
+    m_paitab = new TabAI(m_pcimdiwindow, m_hwnd);
+    m_paitab->Create();
+    InsertTab(m_hwnd, CustomTab_GetItemCount(m_hwnd), IDI_AIASSISTANT, message, (LPARAM)m_paitab);
 }
 
 void
@@ -433,6 +450,11 @@ TabMgmt::Resize()
     {
         m_pqueryobj->Resize();
     }
+
+    if(m_paitab)
+    {
+        m_paitab->Resize();
+    }
 }
 
 // Function deletes all the tab item in the tab control.
@@ -452,7 +474,7 @@ TabMgmt::DeleteAllItem(wyBool isdeletefixedtabs)
 	{
         CustomTab_GetItem(m_hwnd, index, &ctci);
 
-        if((ctci.m_iimage == IDI_QUERYMESSAGE || ctci.m_iimage == IDI_TABLE || ctci.m_iimage == IDI_HISTORY || ctci.m_iimage == IDI_TABLEINDEX) && 
+        if((ctci.m_iimage == IDI_QUERYMESSAGE || ctci.m_iimage == IDI_TABLE || ctci.m_iimage == IDI_HISTORY || ctci.m_iimage == IDI_TABLEINDEX || ctci.m_iimage == IDI_AIASSISTANT) &&
             isdeletefixedtabs == wyFalse)
         {
             index++;
@@ -467,6 +489,7 @@ TabMgmt::DeleteAllItem(wyBool isdeletefixedtabs)
     delete m_presultview;
     m_presultview = NULL;
     m_pqa = NULL;
+    m_paitab = NULL;
 
 	return;
 }
@@ -667,6 +690,10 @@ TabMgmt::ChangeTitles()
 
             case IDI_TABLEINDEX:
                 ptr = _("Info");
+                break;
+
+            case IDI_AIASSISTANT:
+                ptr = _("AI");
                 break;
 		}
 

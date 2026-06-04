@@ -712,6 +712,11 @@ typedef struct tagGlobals
     wyBool      m_istabledataunderquery;
     wyBool      m_isinfotabunderquery;
     wyBool      m_ishistoryunderquery;
+
+    // AI configuration
+    wyString    m_aiurl;
+    wyString    m_aikey;        // encrypted key
+    wyString    m_aimodel;
 	wyInt32		m_prefpersist;
 	wyBool		m_conrestore;
 	wyBool		m_isannouncementopen;
