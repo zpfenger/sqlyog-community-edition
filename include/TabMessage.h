@@ -80,7 +80,11 @@ public:
     wyBool        OnContextMenu(LPARAM lparam);
 
     void        OnWMCommand(WPARAM wparam);
-	 /// HANDLE to the message edit window 
+
+    // AI Analyze - send selected error text to AI Tab
+    void        OnAIAnalyze();
+
+	 /// HANDLE to the message edit window
     HWND        m_hwnd;
 
     wyInt64        m_sumoftotaltime;

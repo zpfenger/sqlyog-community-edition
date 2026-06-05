@@ -26,7 +26,7 @@
 #include "UrlEncode.h"
 #include "Verify.h"
 
-#define		IGNORE_CERT         SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID
+#define		IGNORE_CERT         SECURITY_FLAG_IGNORE_UNKNOWN_CA | SECURITY_FLAG_IGNORE_CERT_CN_INVALID | SECURITY_FLAG_IGNORE_CERT_DATE_INVALID | SECURITY_FLAG_IGNORE_REVOCATION
 //#define		USER_AGENT			"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1; .NET CLR 1.1.4322)"
 //changing user agent to IE11 running in windows 8.1 in SQLyog version 12.08
 #define		USER_AGENT			   "Mozilla/5.0 (compatible, MSIE 11, Windows NT 6.3; Trident/7.0;  rv:11.0) like Gecko"
@@ -384,7 +384,6 @@ retry:
 
 	if (!CheckError (status ) )
     {
-
         if(count < 3 )
         {
             count++;
@@ -396,7 +395,7 @@ retry:
 
     count = 0;
 
-    if (*status == HTTP_STATUS_DENIED || *status == HTTP_STATUS_PROXY_AUTH_REQ ) 
+    if (*status == HTTP_STATUS_DENIED || *status == HTTP_STATUS_PROXY_AUTH_REQ )
     {
 
         count++;
@@ -418,27 +417,27 @@ bool
 CHttp::AllocHandles ( bool isbase64, int *status, bool checkauth)
 {
 
-	DWORD		flags	=	INTERNET_FLAG_RELOAD | 
-							INTERNET_FLAG_NO_CACHE_WRITE | 
+	DWORD		flags	=	INTERNET_FLAG_RELOAD |
+							INTERNET_FLAG_NO_CACHE_WRITE |
 							INTERNET_FLAG_KEEP_CONNECTION;
     unsigned long errnum;
 	DWORD rec_timeout = RECIEVE_TIMEOUT;					// override the 30 second timeout fixed in 12.11
 	wyString contenttype,contenttypestr;
 	//wyInt32     ret;
-	
-		
 
-	/* 
+
+
+	/*
 		If a user has selected to use proxy server for Internet connection then we
-		create a separate handle, send a dummy request and set the username, password 
+		create a separate handle, send a dummy request and set the username, password
 
 		The real data connection and transfer is done in another handle */
-	
+
 	if (IsProxy () )
 		m_InternetSession = InternetOpen (TEXT(USER_AGENT), INTERNET_OPEN_TYPE_PROXY, GetProxy(), NULL, 0 );
 	else
 		m_InternetSession = InternetOpen (TEXT(USER_AGENT), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0 );
-	
+
 	if (!m_InternetSession )
 		return false;
 	InternetSetOption(m_InternetSession, INTERNET_OPTION_RECEIVE_TIMEOUT, &rec_timeout, sizeof(rec_timeout));
@@ -551,6 +550,7 @@ CHttp::Authorize (unsigned long *num)
 	DWORD					lasterr=0;
 	DWORD					flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_KEEP_CONNECTION;
 	HINTERNET				authrequest = NULL;
+	bool                    triednoclientcert = false;
 
 	/* set the flags for internet connection  and check if SSL required */
 	if (wcsicmp (m_Protocol, L"https" ) == 0 )
@@ -568,20 +568,12 @@ retry:
 
         if (lasterr == ERROR_INTERNET_CLIENT_AUTH_CERT_NEEDED ) {
 
-            // Return ERROR_SUCCESS regardless of clicking on OK or Cancel
-            if(lasterr = InternetErrorDlg(GetDesktopWindow(), 
-                                    authrequest,
-                                    ERROR_INTERNET_CLIENT_AUTH_CERT_NEEDED,
-                                    FLAGS_ERROR_UI_FILTER_FOR_ERRORS       |
-                                    FLAGS_ERROR_UI_FLAGS_GENERATE_DATA     |
-                                    FLAGS_ERROR_UI_FLAGS_CHANGE_OPTIONS, 
-                                    NULL) != ERROR_SUCCESS )
-            {
-                goto cleanup;
-            } else
-			{
+            if (!triednoclientcert) {
+                triednoclientcert = true;
+                InternetSetOption(authrequest, INTERNET_OPTION_CLIENT_CERT_CONTEXT, NULL, 0);
                 goto retry;
-			}
+            }
+            goto cleanup;
         }
 		if ((lasterr == ERROR_INTERNET_INVALID_CA) ||
             (lasterr == ERROR_INTERNET_SEC_CERT_CN_INVALID) || 
@@ -747,6 +739,7 @@ CHttp::PostData (char * encodeddata, DWORD encodelen )
 {
     INTERNET_BUFFERS	bufferin;
 	DWORD				flags = IGNORE_CERT, flaglen = 0, byteswritten=0, lasterr = 0;
+	bool                triednoclientcert = false;
    
 	memset (&bufferin, 0, sizeof(INTERNET_BUFFERS));
     
@@ -759,41 +752,35 @@ retry:
 	{
         lasterr = GetLastError();
 
-
         if (lasterr == ERROR_INTERNET_CLIENT_AUTH_CERT_NEEDED ) {
 
-            // Return ERROR_SUCCESS regardless of clicking on OK or Cancel
-            if(InternetErrorDlg(GetDesktopWindow(), 
-                                    m_HttpOpenRequest,
-                                    ERROR_INTERNET_CLIENT_AUTH_CERT_NEEDED,
-                                    FLAGS_ERROR_UI_FILTER_FOR_ERRORS       |
-                                    FLAGS_ERROR_UI_FLAGS_GENERATE_DATA     |
-                                    FLAGS_ERROR_UI_FLAGS_CHANGE_OPTIONS, 
-                                    NULL) != ERROR_SUCCESS )
-                return false;
-            else
+            if (!triednoclientcert) {
+                triednoclientcert = true;
+                InternetSetOption(m_HttpOpenRequest, INTERNET_OPTION_CLIENT_CERT_CONTEXT, NULL, 0);
                 goto retry;
+            }
+            return false;
 
         } else if (lasterr == ERROR_INTERNET_CANNOT_CONNECT ) {
 			return false;
 
-		} else if ((lasterr == ERROR_INTERNET_INVALID_CA ) || 
+		} else if ((lasterr == ERROR_INTERNET_INVALID_CA ) ||
 					(lasterr ==  ERROR_INTERNET_SEC_CERT_CN_INVALID ) ||
-					(lasterr == ERROR_INTERNET_SEC_CERT_DATE_INVALID )	
+					(lasterr == ERROR_INTERNET_SEC_CERT_DATE_INVALID )
 				) {
-			
+
 				InternetQueryOption (m_HttpOpenRequest, INTERNET_OPTION_SECURITY_FLAGS,
 					 (LPVOID)&flags, &flaglen);
 
             flags |= IGNORE_CERT;
             InternetSetOption (m_HttpOpenRequest, INTERNET_OPTION_SECURITY_FLAGS, &flags, sizeof(flags));
-            
+
 			goto retry;
 
         } else {
 			return false;
         }
-    }	
+    }
 
 	if (!yog_InternetWriteFile(m_HttpOpenRequest, encodeddata, encodelen, &byteswritten ) )
 		return false;
@@ -921,6 +908,7 @@ CHttp::CheckError (int * status )
 {
 	DWORD num, numsize;
 	if (!yog_HttpEndRequest (m_HttpOpenRequest, NULL, HSR_INITIATE, 0)) {
+        DWORD enderr = GetLastError();
 
         DWORD           qcode = 0;
         DWORD           qsize = sizeof (DWORD );
@@ -936,17 +924,15 @@ CHttp::CheckError (int * status )
 
 		/* for other return false as they are fatal */
 		return false;
-    }    
+    }
 
 	/* get the status code */
 	numsize = sizeof(num);
-	
-	if (!::HttpQueryInfo (m_HttpOpenRequest, HTTP_QUERY_STATUS_CODE | 
+
+	if (!::HttpQueryInfo (m_HttpOpenRequest, HTTP_QUERY_STATUS_CODE |
                                              HTTP_QUERY_FLAG_NUMBER,
                 (LPVOID)&num, &numsize, NULL))
-	{
 		return false;
-	}
 
 	*status = num;
 
@@ -1199,6 +1185,9 @@ CHttp::ReadResponseStreaming(StreamCallback callback, void* userdata, volatile L
 {
 	char        buffer[4096];
 	DWORD       buffersize, downloaded;
+    unsigned long totalBytes = 0;
+    unsigned long chunkCount = 0;
+    unsigned long lineCount = 0;
 
 	// Line buffer for handling cross-chunk boundaries
 	char*       linebuf = NULL;
@@ -1224,13 +1213,14 @@ CHttp::ReadResponseStreaming(StreamCallback callback, void* userdata, volatile L
 		}
 
 		if (buffersize == 0) {
+            if (linebuflen > 0 && linebuf && linebuf[0] == '{')
+                break;
+
 			// For SSE streaming: server may send data with delays between tokens.
 			// Don't break immediately - wait and retry.
 			emptyRetries++;
-			if (emptyRetries > MAX_EMPTY_RETRIES) {
-				// No data for too long - connection likely closed
+			if (emptyRetries > MAX_EMPTY_RETRIES)
 				break;
-			}
 			Sleep(100);
 			continue;
 		}
@@ -1250,6 +1240,9 @@ CHttp::ReadResponseStreaming(StreamCallback callback, void* userdata, volatile L
 
 		if (downloaded == 0)
 			break;
+
+        chunkCount++;
+        totalBytes += downloaded;
 
 		// Append chunk to line buffer
 		int needed = linebuflen + (int)downloaded + 1;
@@ -1277,6 +1270,7 @@ CHttp::ReadResponseStreaming(StreamCallback callback, void* userdata, volatile L
 
 				// Deliver line to callback
 				if (linelen > 0) {
+                    lineCount++;
 					if (!callback(linebuf + processed, linelen, userdata)) {
 						free(linebuf);
 						return true;
@@ -1303,6 +1297,7 @@ CHttp::ReadResponseStreaming(StreamCallback callback, void* userdata, volatile L
 		if (linelen > 0 && linebuf[linelen - 1] == '\r')
 			linelen--;
 		if (linelen > 0) {
+            lineCount++;
 			callback(linebuf, linelen, userdata);
 		}
 	}

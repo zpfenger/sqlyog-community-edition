@@ -28,6 +28,7 @@
 #include <string>
 #include <sqlite3.h>
 #include "wyString.h"
+#include "AIService.h"
 using namespace std;
 #include "datatype.h"
 
@@ -717,6 +718,9 @@ typedef struct tagGlobals
     wyString    m_aiurl;
     wyString    m_aikey;        // encrypted key
     wyString    m_aimodel;
+
+    // AI configuration struct (Chapters 8-10)
+    AIConfig    m_aiconfig;
 	wyInt32		m_prefpersist;
 	wyBool		m_conrestore;
 	wyBool		m_isannouncementopen;

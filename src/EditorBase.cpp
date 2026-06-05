@@ -18,6 +18,7 @@
 
 
 #include <assert.h>
+#include <process.h>
 #include "Scintilla.h"
 #include "MDIWindow.h"
 #include "Global.h"
@@ -31,6 +32,7 @@
 #include "resource.h"
 #include "TabEditorSplitter.h"
 #include "L10nText.h"
+#include "AIService.h"
 
 extern	PGLOBALS		pGlobals;
 
@@ -151,19 +153,19 @@ EndExecute(MDIWindow * wnd, HWND hwnd, EXECUTEOPTION opt)
 EditorBase::EditorBase(HWND hwnd)
 {
 	m_hwndparent    = hwnd;
-	
+
 	m_edit		    = wyFalse;
 	m_isadvedit     = wyFalse;
-	
+
 	m_filename.SetAs("");
-	
+
 	m_save		    = wyFalse;
 	m_isfilesave	= wyFalse;
-	
+
 	m_hfont		    = NULL;
 	m_nonkey		= wyFalse;
 	wpOrigProc		= NULL;
-	m_findreplace   = NULL;	
+	m_findreplace   = NULL;
     m_isdiscardchange = wyFalse;
     m_stylebeforeac = 0;
     m_styleatac     = 0;
@@ -171,10 +173,25 @@ EditorBase::EditorBase(HWND hwnd)
 
     m_nodeimage     = 0;
     m_dbname.SetAs("");
+
+    // Chapter 9: Async SQL generation
+    m_gen_thread = NULL;
+    m_gen_trigger_line = 0;
+    m_gen_insert_pos = 0;
+    m_gen_has_streamed = false;
+    InterlockedExchange(&m_gen_thread_running, 0);
 }
 
 EditorBase::~EditorBase ()
 {
+    // Chapter 9: Cleanup async SQL generation thread
+    if (m_gen_thread) {
+        // Wait for thread to finish
+        WaitForSingleObject(m_gen_thread, 5000);
+        CloseHandle(m_gen_thread);
+        m_gen_thread = NULL;
+    }
+
     DestroyWindows();
 
 }
@@ -996,8 +1013,37 @@ EditorBase::WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 					    CopyStyledTextToClipBoard(hwnd);
 					    return 0;
 				    }
+
+				    // Chapter 9: Ctrl+Enter to trigger comment-to-SQL generation
+				    if(wparam == VK_RETURN && pGlobals && pGlobals->m_aiconfig.comment_trigger_enabled)
+				    {
+					    int cursor_pos = (int)SendMessage(hwnd, SCI_GETCURRENTPOS, 0, 0);
+					    if(ebase->CheckAITrigger(cursor_pos))
+					    {
+						    int line = (int)SendMessage(hwnd, SCI_LINEFROMPOSITION, cursor_pos, 0);
+						    wyString comment;
+						    ebase->ExtractCommentBlock(line, comment);
+						    if(comment.GetLength() > 0)
+						    {
+							    // Get schema from AutoCompleteInterface if available
+							    wyString schemaSummary;
+							    if(wnd && wnd->m_acinterface && wnd->m_acinterface->m_community_ac)
+							    {
+								    wnd->m_acinterface->m_community_ac->GetSchemaSummary(schemaSummary);
+							    }
+
+							    // Start async SQL generation
+							    ebase->StartSQLGeneration(
+								    comment.GetString(),
+								    schemaSummary.GetString(),
+								    line
+							    );
+						    }
+						    return 1;
+					    }
+				    }
 			    }
-               
+
 			    if(wnd->m_acinterface->HandlerOnWMKeyDown(hwnd, ebase, wparam))
 				    return 1;
 		    }
@@ -1058,7 +1104,31 @@ EditorBase::WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
                SendMessage(hwnd, SCI_REPLACESEL, (WPARAM)0, (LPARAM)"`");
             }
 
-            SendMessage(hwnd, SCI_ENDUNDOACTION, 0, 0);        
+            SendMessage(hwnd, SCI_ENDUNDOACTION, 0, 0);
+            break;
+
+        // Chapter 9: Handle streamed SQL generation token
+        case UM_SQL_GEN_TOKEN:
+        {
+            wyString* pToken = (wyString*)lparam;
+            if (pToken) {
+                ebase->OnSQLGenerationToken(pToken->GetString());
+            }
+            delete pToken;
+            return 0;
+        }
+
+        // Chapter 9: Handle SQL generation completion
+        case UM_SQL_GEN_COMPLETE:
+        {
+            wyString* pResult = (wyString*)lparam;
+            bool success = (wparam == 1);
+            if (pResult) {
+                ebase->OnSQLGenerationComplete(pResult->GetString(), success);
+            }
+            delete pResult;
+            return 0;
+        }
 	}
 
 	return CallWindowProc(ebase->wpOrigProc, hwnd, message, wparam, lparam);
@@ -1116,4 +1186,411 @@ EditorBase::SetAutoIndentation(HWND hwnd, WPARAM wparam)
 	}
 
 	return wyFalse;
+}
+
+// Chapter 9: Check if current line contains AI trigger word
+bool EditorBase::CheckAITrigger(int cursor_pos)
+{
+    HWND hwnd = m_hwnd;
+
+    // Get current line
+    int line = (int)SendMessage(hwnd, SCI_LINEFROMPOSITION, cursor_pos, 0);
+    int line_start = (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, line, 0);
+    int line_end = (int)SendMessage(hwnd, SCI_GETLINEENDPOSITION, line, 0);
+
+    // Get current line text
+    int line_len = line_end - line_start;
+    if (line_len <= 0 || line_len > 1000) return false;
+
+    char* line_text = new char[line_len + 1];
+    struct TextRange tr;
+    tr.chrg.cpMin = line_start;
+    tr.chrg.cpMax = line_end;
+    tr.lpstrText = line_text;
+    SendMessage(hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&tr);
+    line_text[line_len] = '\0';
+
+    // Check if line contains trigger word
+    bool found = false;
+    if (pGlobals && pGlobals->m_aiconfig.comment_trigger_enabled) {
+        const char* trigger = pGlobals->m_aiconfig.comment_trigger_word.GetString();
+        if (trigger && trigger[0]) {
+            const char* pos = strstr(line_text, trigger);
+            if (pos) {
+                // Ensure trigger is in a comment (preceded by -- or // or /*)
+                const char* comment_start = line_text;
+                while (*comment_start == ' ' || *comment_start == '\t') comment_start++;
+
+                if (strncmp(comment_start, "--", 2) == 0 ||
+                    strncmp(comment_start, "//", 2) == 0 ||
+                    strncmp(comment_start, "/*", 2) == 0) {
+                    found = true;
+                }
+            }
+        }
+    }
+
+    delete[] line_text;
+    return found;
+}
+
+// Chapter 9: Extract comment block above trigger line
+void EditorBase::ExtractCommentBlock(int trigger_line, wyString& result)
+{
+    HWND hwnd = m_hwnd;
+    result.Clear();
+
+    // Scan upward, collecting consecutive comment lines
+    int line = trigger_line - 1;
+    while (line >= 0) {
+        int line_start = (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, line, 0);
+        int line_end = (int)SendMessage(hwnd, SCI_GETLINEENDPOSITION, line, 0);
+        int line_len = line_end - line_start;
+
+        if (line_len <= 0 || line_len > 1000) break;
+
+        char* line_text = new char[line_len + 1];
+        struct TextRange tr;
+        tr.chrg.cpMin = line_start;
+        tr.chrg.cpMax = line_end;
+        tr.lpstrText = line_text;
+        SendMessage(hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&tr);
+        line_text[line_len] = '\0';
+
+        // Trim leading whitespace
+        char* trimmed = line_text;
+        while (*trimmed == ' ' || *trimmed == '\t') trimmed++;
+
+        // Check if it's a comment line
+        bool is_comment = false;
+        if (strncmp(trimmed, "--", 2) == 0 ||
+            strncmp(trimmed, "//", 2) == 0 ||
+            strncmp(trimmed, "/*", 2) == 0 ||
+            strncmp(trimmed, "*", 1) == 0) {
+            is_comment = true;
+        }
+
+        if (!is_comment) {
+            delete[] line_text;
+            break;
+        }
+
+        // Extract comment content (remove comment markers)
+        const char* content = trimmed;
+        if (strncmp(content, "--", 2) == 0 || strncmp(content, "//", 2) == 0) {
+            content += 2;
+        } else if (strncmp(content, "/*", 2) == 0) {
+            content += 2;
+        } else if (*content == '*') {
+            content += 1;
+        }
+
+        // Trim leading whitespace
+        while (*content == ' ' || *content == '\t') content++;
+
+        // Remove trailing */ if present
+        char* end_marker = const_cast<char*>(strstr(content, "*/"));
+        if (end_marker) *end_marker = '\0';
+
+        // Add to result (prepend to maintain order)
+        wyString line_str;
+        line_str.SetAs(content);
+        if (result.GetLength() > 0) {
+            line_str.Add("\n");
+            line_str.Add(result.GetString());
+        }
+        result.SetAs(line_str.GetString());
+
+        delete[] line_text;
+        line--;
+    }
+}
+
+// Chapter 9: Insert generated SQL below trigger line
+void EditorBase::InsertGeneratedSQL(const char* sql, int trigger_line)
+{
+    HWND hwnd = m_hwnd;
+
+    int next_line = trigger_line + 1;
+    int insert_pos;
+
+    int max_line = (int)SendMessage(hwnd, SCI_GETLINECOUNT, 0, 0);
+    if (next_line >= max_line) {
+        insert_pos = (int)SendMessage(hwnd, SCI_GETTEXTLENGTH, 0, 0);
+        SendMessage(hwnd, SCI_INSERTTEXT, insert_pos, (LPARAM)"\n");
+        insert_pos++;
+    } else {
+        insert_pos = (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, next_line, 0);
+    }
+
+    SendMessage(hwnd, SCI_BEGINUNDOACTION, 0, 0);
+    SendMessage(hwnd, SCI_INSERTTEXT, insert_pos, (LPARAM)sql);
+    SendMessage(hwnd, SCI_ENDUNDOACTION, 0, 0);
+
+    int new_pos = insert_pos + (int)strlen(sql);
+    SendMessage(hwnd, SCI_GOTOPOS, new_pos, 0);
+}
+
+// Chapter 9: Show loading placeholder below trigger line
+void EditorBase::ShowCommentLoadingPlaceholder(int trigger_line)
+{
+    HWND hwnd = m_hwnd;
+
+    int next_line = trigger_line + 1;
+    int insert_pos;
+
+    int max_line = (int)SendMessage(hwnd, SCI_GETLINECOUNT, 0, 0);
+    if (next_line >= max_line) {
+        insert_pos = (int)SendMessage(hwnd, SCI_GETTEXTLENGTH, 0, 0);
+        SendMessage(hwnd, SCI_INSERTTEXT, insert_pos, (LPARAM)"\n");
+        insert_pos++;
+    } else {
+        insert_pos = (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, next_line, 0);
+    }
+
+    const char* placeholder = "-- \xe6\xad\xa3\xe5\x9c\xa8\xe7\x94\x9f\xe6\x88\x90 SQL...";  // "-- 正在生成 SQL..."
+    SendMessage(hwnd, SCI_INSERTTEXT, insert_pos, (LPARAM)placeholder);
+}
+
+// Chapter 9: Remove loading placeholder below trigger line
+void EditorBase::RemoveCommentLoadingPlaceholder(int trigger_line)
+{
+    HWND hwnd = m_hwnd;
+
+    int next_line = trigger_line + 1;
+    int max_line = (int)SendMessage(hwnd, SCI_GETLINECOUNT, 0, 0);
+    if (next_line >= max_line) return;
+
+    int line_start = (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, next_line, 0);
+    int line_end = (int)SendMessage(hwnd, SCI_GETLINEENDPOSITION, next_line, 0);
+    int line_len = line_end - line_start;
+
+    if (line_len <= 0 || line_len > 100) return;
+
+    char* line_text = new char[line_len + 1];
+    struct TextRange tr;
+    tr.chrg.cpMin = line_start;
+    tr.chrg.cpMax = line_end;
+    tr.lpstrText = line_text;
+    SendMessage(hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&tr);
+    line_text[line_len] = '\0';
+
+    // Check if it's the placeholder
+    if (strstr(line_text, "\xe6\xad\xa3\xe5\x9c\xa8\xe7\x94\x9f\xe6\x88\x90 SQL...") != NULL) {
+        SendMessage(hwnd, SCI_SETTARGETSTART, line_start, 0);
+        SendMessage(hwnd, SCI_SETTARGETEND, line_end + 1, 0);  // +1 to include newline
+        SendMessage(hwnd, SCI_REPLACETARGET, 0, (LPARAM)"");
+    }
+
+    delete[] line_text;
+}
+
+// Chapter 9: Show failure recovery message
+void EditorBase::ShowGenerationFailureMessage(int trigger_line, const char* errorMsg)
+{
+    HWND hwnd = m_hwnd;
+
+    // Remove loading placeholder first
+    RemoveCommentLoadingPlaceholder(trigger_line);
+
+    // Find position after trigger line
+    int next_line = trigger_line + 1;
+    int insert_pos;
+
+    int max_line = (int)SendMessage(hwnd, SCI_GETLINECOUNT, 0, 0);
+    if (next_line >= max_line) {
+        insert_pos = (int)SendMessage(hwnd, SCI_GETTEXTLENGTH, 0, 0);
+        SendMessage(hwnd, SCI_INSERTTEXT, insert_pos, (LPARAM)"\n");
+        insert_pos++;
+    } else {
+        insert_pos = (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, next_line, 0);
+    }
+
+    // Build failure message
+    wyString failMsg;
+    if (errorMsg && errorMsg[0]) {
+        failMsg.Sprintf("-- \xe7\x94\x9f\xe6\x88\x90\xe5\xa4\xb1\xe8\xb4\xa5: %s", errorMsg);  // "-- 生成失败: ..."
+    } else {
+        failMsg.SetAs("-- \xe7\x94\x9f\xe6\x88\x90\xe5\xa4\xb1\xe8\xb4\xa5\xef\xbc\x8c\xe8\xaf\xb7\xe6\x8c\x89 Ctrl+Z \xe6\x92\xa4\xe9\x94\x80\xef\xbc\x8c\xe6\x88\x96\xe9\x87\x8d\xe6\x96\xb0\xe8\xbe\x93\xe5\x85\xa5\xe8\xa7\xa6\xe5\x8f\x91\xe8\xaf\x8d\xe9\x87\x8d\xe8\xaf\x95");  // "-- 生成失败，请按 Ctrl+Z 撤销，或重新输入触发词重试"
+    }
+
+    // Insert failure message
+    SendMessage(hwnd, SCI_INSERTTEXT, insert_pos, (LPARAM)failMsg.GetString());
+}
+
+// Chapter 9: Start async SQL generation
+void EditorBase::StartSQLGeneration(const char* comment, const char* schemaInfo, int trigger_line)
+{
+    // Check if thread is already running
+    if (InterlockedCompareExchange(&m_gen_thread_running, 1, 0) == 1)
+        return;
+
+    // Store trigger line for completion handler
+    m_gen_trigger_line = trigger_line;
+    m_gen_insert_pos = 0;
+    m_gen_has_streamed = false;
+
+    // Show loading placeholder
+    ShowCommentLoadingPlaceholder(trigger_line);
+
+    // Build request
+    wyString requestJson;
+    AIService::BuildGenerateRequestJson(
+        comment,
+        schemaInfo,
+        pGlobals->m_aimodel.GetString(),
+        &requestJson
+    );
+
+    // Create thread parameter
+    GenThreadParam* param = new GenThreadParam;
+    param->pThis = this;
+    param->requestJson.SetAs(requestJson.GetString());
+    param->triggerLine = trigger_line;
+    param->hwndEditor = m_hwnd;
+
+    // Start background thread
+    if (m_gen_thread) {
+        CloseHandle(m_gen_thread);
+        m_gen_thread = NULL;
+    }
+    m_gen_thread = (HANDLE)_beginthreadex(NULL, 0, SQLGenerationThreadProc, param, 0, NULL);
+    if (!m_gen_thread) {
+        InterlockedExchange(&m_gen_thread_running, 0);
+        delete param;
+        ShowGenerationFailureMessage(trigger_line, _("Failed to start AI generation thread"));
+    }
+}
+
+// Stream callback for SQL generation - collect all tokens
+struct GenStreamCtx {
+    wyString result;
+    HWND     hwndEditor;
+};
+
+static bool GenStreamCallback(const char* token, int len, void* ud)
+{
+    GenStreamCtx* ctx = (GenStreamCtx*)ud;
+    if (!ctx)
+        return false;
+
+    if (token && len > 0) {
+        if (ctx && ctx->hwndEditor) {
+            wyString* pToken = new wyString();
+            pToken->SetAs(token, len);
+            BOOL posted = PostMessage(ctx->hwndEditor, UM_SQL_GEN_TOKEN, 0, (LPARAM)pToken);
+            if (!posted)
+                delete pToken;
+        }
+
+        // Create null-terminated copy since wyString::Add(ptr, len) is private
+        char* buf = new char[len + 1];
+        memcpy(buf, token, len);
+        buf[len] = '\0';
+        ctx->result.Add(buf);
+        delete[] buf;
+    }
+    return true;  // continue reading
+}
+
+// Background thread for SQL generation
+unsigned __stdcall EditorBase::SQLGenerationThreadProc(void* param)
+{
+    GenThreadParam* genParam = (GenThreadParam*)param;
+    if (!genParam || !genParam->pThis) {
+        delete genParam;
+        return 0;
+    }
+
+    // Send AI request with streaming callback
+    GenStreamCtx streamCtx;
+    streamCtx.hwndEditor = genParam->hwndEditor;
+    wyString errorBuf;
+    DWORD timeoutMs = (pGlobals && pGlobals->m_aiconfig.error_analysis_timeout_ms > 0)
+        ? (DWORD)pGlobals->m_aiconfig.error_analysis_timeout_ms
+        : 60000;
+
+    // Use the request JSON directly (stream: true)
+    bool success = AIService::SendRequestStreaming(
+        &pGlobals->m_aiconfig,
+        genParam->requestJson.GetString(),
+        GenStreamCallback,
+        &streamCtx,
+        NULL,  // No stop flag
+        &errorBuf,
+        timeoutMs
+    );
+
+    // Prepare result message to post to UI thread
+    wyString* pResult = new wyString();
+    if (success && streamCtx.result.GetLength() > 0) {
+        pResult->SetAs(streamCtx.result.GetString());
+    } else {
+        pResult->SetAs(errorBuf.GetString());
+    }
+
+    // Post message to UI thread to update the editor
+    PostMessage(genParam->hwndEditor, UM_SQL_GEN_COMPLETE,
+                success ? 1 : 0, (LPARAM)pResult);
+
+    // Cleanup
+    InterlockedExchange(&genParam->pThis->m_gen_thread_running, 0);
+    delete genParam;
+    return 0;
+}
+
+// Chapter 9: Insert streamed SQL generation token on UI thread
+void EditorBase::OnSQLGenerationToken(const char* token)
+{
+    if (!token || !token[0])
+        return;
+
+    HWND hwnd = m_hwnd;
+
+    if (!m_gen_has_streamed) {
+        RemoveCommentLoadingPlaceholder(m_gen_trigger_line);
+
+        int next_line = m_gen_trigger_line + 1;
+        int max_line = (int)SendMessage(hwnd, SCI_GETLINECOUNT, 0, 0);
+        if (next_line >= max_line) {
+            m_gen_insert_pos = (int)SendMessage(hwnd, SCI_GETTEXTLENGTH, 0, 0);
+            SendMessage(hwnd, SCI_INSERTTEXT, m_gen_insert_pos, (LPARAM)"\n");
+            m_gen_insert_pos++;
+        } else {
+            m_gen_insert_pos = (int)SendMessage(hwnd, SCI_POSITIONFROMLINE, next_line, 0);
+        }
+
+        SendMessage(hwnd, SCI_BEGINUNDOACTION, 0, 0);
+        m_gen_has_streamed = true;
+    }
+
+    SendMessage(hwnd, SCI_INSERTTEXT, m_gen_insert_pos, (LPARAM)token);
+    m_gen_insert_pos += (int)strlen(token);
+    SendMessage(hwnd, SCI_GOTOPOS, m_gen_insert_pos, 0);
+}
+
+// Chapter 9: Handle SQL generation completion on UI thread
+void EditorBase::OnSQLGenerationComplete(const char* result, bool success)
+{
+    if (m_gen_has_streamed) {
+        if (!success && result && result[0]) {
+            wyString failMsg;
+            failMsg.Sprintf("\n-- \xe7\x94\x9f\xe6\x88\x90\xe4\xb8\xad\xe6\x96\xad: %s", result);  // "-- 生成中断: ..."
+            SendMessage(m_hwnd, SCI_INSERTTEXT, m_gen_insert_pos, (LPARAM)failMsg.GetString());
+            m_gen_insert_pos += failMsg.GetLength();
+        }
+        SendMessage(m_hwnd, SCI_ENDUNDOACTION, 0, 0);
+        m_gen_has_streamed = false;
+        m_gen_insert_pos = 0;
+        return;
+    }
+
+    if (success && result && result[0]) {
+        // Remove loading placeholder and insert generated SQL
+        RemoveCommentLoadingPlaceholder(m_gen_trigger_line);
+        InsertGeneratedSQL(result, m_gen_trigger_line);
+    } else {
+        // Show failure message
+        ShowGenerationFailureMessage(m_gen_trigger_line, result);
+    }
 }

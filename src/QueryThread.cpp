@@ -23,6 +23,7 @@
 #include "pcre.h"
 #include "SQLFormatter.h"
 #include "Global.h"
+#include "AIService.h"
 
 #ifndef COMMUNITY
 #include "HelperEnt.h"

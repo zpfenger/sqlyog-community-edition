@@ -174,6 +174,9 @@ public:
 
     wyInt32         GetActiveTabIcon();
 
+    /// Gets the index of the AI Tab, returns -1 if not found
+    wyInt32         GetAITabIndex();
+
     wyInt32         SelectFixedTab(wyInt32 image, wyBool isonlyprob = wyFalse);
 
     void            DeleteTab(wyInt32 index,wyBool ispostion=wyFalse);

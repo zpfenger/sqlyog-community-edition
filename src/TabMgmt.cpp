@@ -489,7 +489,10 @@ TabMgmt::DeleteAllItem(wyBool isdeletefixedtabs)
     delete m_presultview;
     m_presultview = NULL;
     m_pqa = NULL;
-    m_paitab = NULL;
+    if(isdeletefixedtabs == wyTrue)
+    {
+        m_paitab = NULL;
+    }
 
 	return;
 }
@@ -648,6 +651,22 @@ TabMgmt::GetSelectedItem()
 	return ctci.m_iimage;
 }
 
+// Find the index of the AI Tab by its icon ID, returns -1 if not found.
+wyInt32
+TabMgmt::GetAITabIndex()
+{
+    wyInt32 count = (wyInt32)CustomTab_GetItemCount(m_hwnd);
+    CTCITEM ctci = {0};
+    ctci.m_mask = CTBIF_IMAGE;
+
+    for (wyInt32 i = 0; i < count; i++)
+    {
+        CustomTab_GetItem(m_hwnd, i, &ctci);
+        if (ctci.m_iimage == IDI_AIASSISTANT)
+            return i;
+    }
+    return -1;
+}
 
 // Function to change the number in all the tab items when a tab is deleted or inserted.
 void

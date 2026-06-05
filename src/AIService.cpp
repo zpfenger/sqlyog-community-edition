@@ -18,6 +18,7 @@
 
 #include <windows.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 #include "AIService.h"
 #include "Global.h"
@@ -33,6 +34,14 @@ extern PGLOBALS		pGlobals;
 #define AI_KEY_URL  "AIUrl"
 #define AI_KEY_KEY  "AIKey"
 #define AI_KEY_MODEL "AIModel"
+
+// Comment-to-SQL keys (Chapter 9)
+#define AI_KEY_COMMENT_TRIGGER_ENABLED "AICommentTriggerEnabled"
+#define AI_KEY_COMMENT_TRIGGER_WORD    "AICommentTriggerWord"
+
+// Error Analysis keys (Chapter 10)
+#define AI_KEY_AUTO_ANALYZE_ERROR      "AIAutoAnalyzeError"
+#define AI_KEY_ERROR_ANALYSIS_TIMEOUT  "AIErrorAnalysisTimeout"
 
 // Predefined system prompts (English)
 static const char* PROMPT_ANALYZE_EN =
@@ -55,6 +64,25 @@ static const char* PROMPT_CHAT_EN =
     "database design, performance tuning, and troubleshooting. "
     "Reply concisely and professionally.";
 
+// Chapter 10: Error Analysis prompt
+static const char* PROMPT_ERROR_ANALYSIS_EN =
+    "You are a MySQL expert. Analyze the SQL error and provide a solution.\n\n"
+    "Rules:\n"
+    "1. Explain the error cause clearly\n"
+    "2. Provide specific fix suggestions\n"
+    "3. Give the corrected SQL if possible\n"
+    "4. If it's a common mistake, mention prevention tips\n"
+    "5. Reply in the same language as the error message\n\n"
+    "Format your response as:\n"
+    "**错误原因：** [explanation]\n\n"
+    "**修复建议：**\n"
+    "1. [suggestion 1]\n"
+    "2. [suggestion 2]\n\n"
+    "**正确的 SQL：**\n"
+    "```sql\n"
+    "[corrected SQL]\n"
+    "```";
+
 // Predefined system prompts (Chinese)
 static const char* PROMPT_ANALYZE_CN =
     "你是 MySQL 专家。分析给定的 SQL 语句，指出性能问题、潜在 bug 和优化建议。"
@@ -72,6 +100,25 @@ static const char* PROMPT_CHAT_CN =
     "你是 MySQL 数据库专家助手。帮助用户解决 SQL 问题、"
     "数据库设计、性能调优和故障排除。用中文简洁专业地回复。";
 
+// Chapter 10: Error Analysis prompt (Chinese)
+static const char* PROMPT_ERROR_ANALYSIS_CN =
+    "你是 MySQL 专家。分析 SQL 错误并提供解决方案。\n\n"
+    "规则：\n"
+    "1. 清楚解释错误原因\n"
+    "2. 提供具体的修复建议\n"
+    "3. 如果可能，给出正确的 SQL\n"
+    "4. 如果是常见错误，提及预防措施\n"
+    "5. 用中文回复\n\n"
+    "格式：\n"
+    "**错误原因：** [解释]\n\n"
+    "**修复建议：**\n"
+    "1. [建议 1]\n"
+    "2. [建议 2]\n\n"
+    "**正确的 SQL：**\n"
+    "```sql\n"
+    "[修正后的 SQL]\n"
+    "```";
+
 // Check if current language is Chinese
 static bool IsChineseLang()
 {
@@ -83,6 +130,7 @@ const char* AIService::GetPromptAnalyze()   { return IsChineseLang() ? PROMPT_AN
 const char* AIService::GetPromptBeautify()  { return IsChineseLang() ? PROMPT_BEAUTIFY_CN : PROMPT_BEAUTIFY_EN; }
 const char* AIService::GetPromptGenerate()  { return IsChineseLang() ? PROMPT_GENERATE_CN : PROMPT_GENERATE_EN; }
 const char* AIService::GetPromptChat()      { return IsChineseLang() ? PROMPT_CHAT_CN : PROMPT_CHAT_EN; }
+const char* AIService::GetPromptErrorAnalysis() { return IsChineseLang() ? PROMPT_ERROR_ANALYSIS_CN : PROMPT_ERROR_ANALYSIS_EN; }
 
 void AIService::LoadConfig(AIConfig* config)
 {
@@ -130,6 +178,15 @@ void AIService::LoadConfig(AIConfig* config)
         config->model.SetAs(val.GetString());
     else
         config->model.SetAs(DEFAULT_MODEL);
+
+    // Read Comment-to-SQL settings (Chapter 9)
+    config->comment_trigger_enabled = wyIni::IniGetInt(AI_SECTION, AI_KEY_COMMENT_TRIGGER_ENABLED, 1, path.GetString()) != 0;
+    wyIni::IniGetString(AI_SECTION, AI_KEY_COMMENT_TRIGGER_WORD, "@ai", &val, path.GetString());
+    config->comment_trigger_word.SetAs(val.GetString());
+
+    // Read Error Analysis settings (Chapter 10)
+    config->auto_analyze_error = wyIni::IniGetInt(AI_SECTION, AI_KEY_AUTO_ANALYZE_ERROR, 0, path.GetString()) != 0;
+    config->error_analysis_timeout_ms = wyIni::IniGetInt(AI_SECTION, AI_KEY_ERROR_ANALYSIS_TIMEOUT, 10000, path.GetString());
 }
 
 void AIService::SaveConfig(AIConfig* config)
@@ -156,10 +213,27 @@ void AIService::SaveConfig(AIConfig* config)
     // Save Model (plain text)
     wyIni::IniWriteString(AI_SECTION, AI_KEY_MODEL, config->model.GetString(), path.GetString());
 
+    // Save Comment-to-SQL settings (Chapter 9)
+    wyIni::IniWriteInt(AI_SECTION, AI_KEY_COMMENT_TRIGGER_ENABLED, config->comment_trigger_enabled ? 1 : 0, path.GetString());
+    wyIni::IniWriteString(AI_SECTION, AI_KEY_COMMENT_TRIGGER_WORD, config->comment_trigger_word.GetString(), path.GetString());
+
+    // Save Error Analysis settings (Chapter 10)
+    wyIni::IniWriteInt(AI_SECTION, AI_KEY_AUTO_ANALYZE_ERROR, config->auto_analyze_error ? 1 : 0, path.GetString());
+    wyIni::IniWriteInt(AI_SECTION, AI_KEY_ERROR_ANALYSIS_TIMEOUT, config->error_analysis_timeout_ms, path.GetString());
+
     // Update globals
     pGlobals->m_aiurl.SetAs(config->url.GetString());
     pGlobals->m_aikey.SetAs(encKey.GetString());
     pGlobals->m_aimodel.SetAs(config->model.GetString());
+
+    // Update m_aiconfig so code generation and other features use the saved values
+    pGlobals->m_aiconfig.url.SetAs(config->url.GetString());
+    pGlobals->m_aiconfig.key.SetAs(config->key.GetString());
+    pGlobals->m_aiconfig.model.SetAs(config->model.GetString());
+    pGlobals->m_aiconfig.comment_trigger_enabled = config->comment_trigger_enabled;
+    pGlobals->m_aiconfig.comment_trigger_word.SetAs(config->comment_trigger_word.GetString());
+    pGlobals->m_aiconfig.auto_analyze_error = config->auto_analyze_error;
+    pGlobals->m_aiconfig.error_analysis_timeout_ms = config->error_analysis_timeout_ms;
 }
 
 void AIService::BuildRequestJson(const char* prompt, const char* systemPrompt,
@@ -205,6 +279,244 @@ void AIService::BuildRequestJson(const char* prompt, const char* systemPrompt,
     result->SetAs(writer.write(root).c_str());
 }
 
+void AIService::BuildGenerateRequestJson(const char* comment,
+                                          const char* schemaInfo,
+                                          const char* configModel,
+                                          wyString* result)
+{
+    if (!result)
+        return;
+
+    Json::Value root;
+    Json::Value messages(Json::arrayValue);
+
+    // System prompt
+    Json::Value sysMsg;
+    sysMsg["role"] = "system";
+    sysMsg["content"] = GetPromptGenerate();
+    messages.append(sysMsg);
+
+    // User message
+    Json::Value userMsg;
+    userMsg["role"] = "user";
+
+    wyString prompt;
+    prompt.Sprintf("Database Schema:\n%s\n\nDescription:\n%s\n\nGenerate SQL:",
+                   schemaInfo ? schemaInfo : "",
+                   comment ? comment : "");
+    userMsg["content"] = prompt.GetString();
+    messages.append(userMsg);
+
+    root["model"] = configModel ? configModel : "";
+    root["stream"] = true;  // Use streaming for all requests
+    root["messages"] = messages;
+
+    Json::FastWriter writer;
+    result->SetAs(writer.write(root).c_str());
+}
+
+void AIService::BuildErrorAnalysisRequestJson(const char* sql,
+                                               const char* errorMsg,
+                                               int errorCode,
+                                               const char* configModel,
+                                               wyString* result)
+{
+    if (!result)
+        return;
+
+    Json::Value root;
+    Json::Value messages(Json::arrayValue);
+
+    // System prompt
+    Json::Value sysMsg;
+    sysMsg["role"] = "system";
+    sysMsg["content"] = GetPromptErrorAnalysis();
+    messages.append(sysMsg);
+
+    // Classify error for targeted prompt
+    SQLErrorType errType = ClassifyError(errorMsg, errorCode);
+    wyString prompt;
+
+    switch (errType) {
+    case ERR_TABLE_NOT_FOUND:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "这是一个表不存在的错误。请：\n"
+            "1. 检查表名是否拼写正确\n"
+            "2. 列出可能的正确表名\n"
+            "3. 提供修正后的 SQL",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+
+    case ERR_COLUMN_NOT_FOUND:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "这是一个列名不存在的错误。请：\n"
+            "1. 检查列名是否拼写正确\n"
+            "2. 检查是否需要表名前缀\n"
+            "3. 提供修正后的 SQL",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+
+    case ERR_SYNTAX:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "这是一个语法错误。请：\n"
+            "1. 指出语法错误的位置\n"
+            "2. 解释正确的语法\n"
+            "3. 提供修正后的 SQL",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+
+    case ERR_DUPLICATE_KEY:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "这是一个主键/唯一键重复错误。请：\n"
+            "1. 解释重复的原因\n"
+            "2. 提供使用 INSERT IGNORE 或 ON DUPLICATE KEY UPDATE 的解决方案",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+
+    case ERR_FOREIGN_KEY:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "这是一个外键约束错误。请：\n"
+            "1. 解释外键约束关系\n"
+            "2. 检查引用的记录是否存在\n"
+            "3. 提供正确的操作顺序",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+
+    case ERR_PERMISSION:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "这是一个权限不足错误。请：\n"
+            "1. 说明需要哪些权限\n"
+            "2. 提供 GRANT 语句示例",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+
+    case ERR_CONNECTION:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "这是一个连接问题。请：\n"
+            "1. 分析可能的连接问题原因\n"
+            "2. 提供排查步骤",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+
+    default:
+        prompt.Sprintf(
+            "SQL执行出错，错误代码 %d\n\n"
+            "SQL: %s\n\n"
+            "错误信息: %s\n\n"
+            "请分析错误原因并提供修复建议。",
+            errorCode,
+            sql ? sql : "",
+            errorMsg ? errorMsg : "");
+        break;
+    }
+
+    // User message with error details
+    Json::Value userMsg;
+    userMsg["role"] = "user";
+    userMsg["content"] = prompt.GetString();
+    messages.append(userMsg);
+
+    root["model"] = configModel ? configModel : "";
+    root["stream"] = true;
+    root["messages"] = messages;
+
+    Json::FastWriter writer;
+    result->SetAs(writer.write(root).c_str());
+}
+
+// Classify SQL error by error code and message content (Chapter 10)
+SQLErrorType AIService::ClassifyError(const char* errorMsg, int errorCode)
+{
+    // Classify by MySQL error code first
+    switch (errorCode) {
+    case 1064:  // SQL syntax error
+        return ERR_SYNTAX;
+
+    case 1146:  // Table doesn't exist
+    case 1051:  // Unknown table
+        return ERR_TABLE_NOT_FOUND;
+
+    case 1054:  // Unknown column
+    case 1060:  // Duplicate column name
+        return ERR_COLUMN_NOT_FOUND;
+
+    case 1062:  // Duplicate entry for key
+    case 1586:  // Duplicate entry for key (newer versions)
+        return ERR_DUPLICATE_KEY;
+
+    case 1451:  // Cannot delete a parent row (foreign key constraint)
+    case 1452:  // Cannot add a child row (foreign key constraint)
+        return ERR_FOREIGN_KEY;
+
+    case 1045:  // Access denied
+    case 1142:  // Command denied
+        return ERR_PERMISSION;
+
+    case 2003:  // Can't connect to server
+    case 2006:  // Server has gone away
+    case 2013:  // Lost connection
+        return ERR_CONNECTION;
+    }
+
+    // Fall back to message content analysis
+    if (!errorMsg || !errorMsg[0])
+        return ERR_UNKNOWN;
+
+    // Convert to lowercase for matching
+    char lowerMsg[4096];
+    strncpy(lowerMsg, errorMsg, sizeof(lowerMsg) - 1);
+    lowerMsg[sizeof(lowerMsg) - 1] = '\0';
+    for (int i = 0; lowerMsg[i]; i++) {
+        lowerMsg[i] = (char)tolower((unsigned char)lowerMsg[i]);
+    }
+
+    if (strstr(lowerMsg, "doesn't exist") || strstr(lowerMsg, "not found"))
+        return ERR_TABLE_NOT_FOUND;
+
+    if (strstr(lowerMsg, "unknown column"))
+        return ERR_COLUMN_NOT_FOUND;
+
+    if (strstr(lowerMsg, "syntax error") || strstr(lowerMsg, "near"))
+        return ERR_SYNTAX;
+
+    return ERR_UNKNOWN;
+}
+
 // Wrapper for stream callback that tracks token count
 struct TokenCounterContext {
     StreamCallback originalCallback;
@@ -216,6 +528,12 @@ bool AIService::SSELineCallback(const char* line, int lineLen, void* userdata)
 {
     TokenCounterContext* ctx = (TokenCounterContext*)userdata;
     if (!ctx || !ctx->originalCallback)
+        return false;
+
+    bool hasDataPrefix = (line && lineLen >= 6 && strncmp(line, "data: ", 6) == 0);
+    bool isDone = (hasDataPrefix && lineLen == 12 && strncmp(line + 6, "[DONE]", 6) == 0);
+
+    if (isDone)
         return false;
 
     wyString content;
@@ -232,16 +550,24 @@ bool AIService::SSELineCallback(const char* line, int lineLen, void* userdata)
             // Try OpenAI format: choices[0].message.content
             if (root.isMember("choices") && root["choices"].isArray() && root["choices"].size() > 0) {
                 const Json::Value& choice = root["choices"][0];
-                if (choice.isMember("message") && choice["message"].isMember("content")) {
-                    content.SetAs(choice["message"]["content"].asCString());
-                    InterlockedIncrement(&ctx->tokenCount);
-                    return ctx->originalCallback(content.GetString(), content.GetLength(), ctx->originalUserdata);
+                if (choice.isMember("message") &&
+                    choice["message"].isMember("content") &&
+                    choice["message"]["content"].isString()) {
+                    const char* text = choice["message"]["content"].asCString();
+                    if (text && text[0] != '\0') {
+                        content.SetAs(text);
+                        InterlockedIncrement(&ctx->tokenCount);
+                        return ctx->originalCallback(content.GetString(), content.GetLength(), ctx->originalUserdata);
+                    }
                 }
                 // Also try choices[0].text (older format)
                 if (choice.isMember("text") && choice["text"].isString()) {
-                    content.SetAs(choice["text"].asCString());
-                    InterlockedIncrement(&ctx->tokenCount);
-                    return ctx->originalCallback(content.GetString(), content.GetLength(), ctx->originalUserdata);
+                    const char* text = choice["text"].asCString();
+                    if (text && text[0] != '\0') {
+                        content.SetAs(text);
+                        InterlockedIncrement(&ctx->tokenCount);
+                        return ctx->originalCallback(content.GetString(), content.GetLength(), ctx->originalUserdata);
+                    }
                 }
             }
         }
@@ -255,7 +581,8 @@ bool AIService::SendRequestStreaming(AIConfig* config,
                                       StreamCallback callback,
                                       void* userdata,
                                       volatile LONG* stop,
-                                      wyString* errorBuf)
+                                      wyString* errorBuf,
+                                      DWORD timeoutMs)
 {
     if (!config || !requestJson || !callback)
         return false;
@@ -282,8 +609,8 @@ bool AIService::SendRequestStreaming(AIConfig* config,
     wcsncpy(wauth, authHeader.GetAsWideChar(), 4095);
     http.SetHeader(wauth);
 
-    // Set longer timeout for AI requests (5 minutes)
-    http.SetTimeOut(300000);
+    // Let callers choose short timeouts for latency-sensitive requests.
+    http.SetTimeOut(timeoutMs > 0 ? timeoutMs : 300000);
 
     // Send request (checkauth=false for AI API, no challenge/response needed)
     int status = 0;
@@ -291,7 +618,8 @@ bool AIService::SendRequestStreaming(AIConfig* config,
     body.SetAs(requestJson);
 
     if (!http.SendData((char*)body.GetString(), body.GetLength(), false, &status, false)) {
-        if (errorBuf) errorBuf->Sprintf(_("HTTP request failed (status: %d)"), status);
+        DWORD err = GetLastError();
+        if (errorBuf) errorBuf->Sprintf(_("HTTP request failed (status: %d, error: %lu)"), status, err);
         return false;
     }
 
@@ -369,7 +697,7 @@ bool AIService::ParseSSELine(const char* line, int lineLen, wyString& content)
     if (!reader.parse(data, data + dataLen, root))
         return false;
 
-    // Extract choices[0].delta.content or choices[0].delta.reasoning_content
+    // Extract choices[0].delta.content (ignore reasoning_content - it's the thinking process)
     if (root.isMember("choices") && root["choices"].isArray() &&
         root["choices"].size() > 0)
     {
@@ -377,18 +705,10 @@ bool AIService::ParseSSELine(const char* line, int lineLen, wyString& content)
         if (choices[0].isMember("delta")) {
             const Json::Value& delta = choices[0]["delta"];
 
-            // Try "content" first (standard OpenAI format)
+            // Only extract "content" (standard OpenAI format)
+            // Ignore "reasoning_content" - it's the model's thinking process
             if (delta.isMember("content") && delta["content"].isString()) {
                 const char* text = delta["content"].asCString();
-                if (text && text[0] != '\0') {
-                    content.SetAs(text);
-                    return true;
-                }
-            }
-
-            // Try "reasoning_content" (used by some models like mimo)
-            if (delta.isMember("reasoning_content") && delta["reasoning_content"].isString()) {
-                const char* text = delta["reasoning_content"].asCString();
                 if (text && text[0] != '\0') {
                     content.SetAs(text);
                     return true;

@@ -98,6 +98,7 @@
 #define STYLE_USER_MSG    1
 #define STYLE_AI_MSG      2
 #define STYLE_ERROR_MSG   3
+#define STYLE_LOADING_MSG 9   // Loading state (gray)
 
 // Markdown styles
 #define STYLE_CODE_BLOCK  4   // Code block (light blue bg)
@@ -207,6 +208,9 @@ wyBool TabAI::Create()
         SendMessage(m_hwnddisplay, SCI_STYLESETFORE, STYLE_AI_MSG, RGB(0, 128, 0));
         // Error: red
         SendMessage(m_hwnddisplay, SCI_STYLESETFORE, STYLE_ERROR_MSG, RGB(200, 0, 0));
+        // Loading: gray
+        SendMessage(m_hwnddisplay, SCI_STYLESETFONT, STYLE_LOADING_MSG, (LPARAM)"Microsoft YaHei");
+        SendMessage(m_hwnddisplay, SCI_STYLESETFORE, STYLE_LOADING_MSG, RGB(128, 128, 128));
 
         // Markdown styles - light theme (white/blue)
         // Code block: light blue background
@@ -510,6 +514,7 @@ void TabAI::OnSend()
     param->pthis = this;
     param->prompt.SetAs(requestJson.GetString());
     param->systemPrompt.SetAs(AIService::GetPromptChat());
+    param->timeoutMs = 300000;
 
     if (m_hthread) {
         CloseHandle(m_hthread);
@@ -814,6 +819,7 @@ void TabAI::SendSQLToAI(const wyChar* sql, const wyChar* action)
     param->pthis = this;
     param->prompt.SetAs(requestJson.GetString());
     param->systemPrompt.SetAs(sysPrompt);
+    param->timeoutMs = 300000;
 
     if (m_hthread) {
         CloseHandle(m_hthread);
@@ -824,8 +830,79 @@ void TabAI::SendSQLToAI(const wyChar* sql, const wyChar* action)
     m_hthread = (HANDLE)_beginthreadex(NULL, 0, StreamThreadProc, param, 0, &threadid);
 }
 
+void TabAI::SendErrorToAI(const wyChar* errorText)
+{
+    if (!errorText || !errorText[0])
+        return;
+
+    if (InterlockedCompareExchange(&m_istreaming, 0, 0) != 0)
+        return;
+
+    const char* langcode = GetL10nLangcode();
+    bool isChinese = (langcode && (strcmp(langcode, "zh-cn") == 0 || strcmp(langcode, "zh") == 0));
+
+    wyString userMsg;
+    if (isChinese) {
+        userMsg.Sprintf("\xe8\xaf\xb7\xe5\x88\x86\xe6\x9e\x90\xe4\xbb\xa5\xe4\xb8\x8b SQL \xe9\x94\x99\xe8\xaf\xaf\xe4\xbf\xa1\xe6\x81\xaf\xe5\xb9\xb6\xe6\x8f\x90\xe4\xbe\x9b\xe8\xa7\xa3\xe5\x86\xb3\xe6\x96\xb9\xe6\xa1\x88\xef\xbc\x9a\n\n%s", errorText);
+    } else {
+        userMsg.Sprintf("Please analyze this SQL error and provide a fix:\n\n%s", errorText);
+    }
+
+    AddMessageToDisplay("user", userMsg.GetString());
+
+    InterlockedExchange(&m_istreaming, 1);
+    InterlockedExchange(&m_stopstream, 0);
+    UpdateSendButton();
+
+    AddMessageToDisplay("assistant", "");
+    m_streambuf.Clear();
+
+    SetWindowText(m_hwndstatus, isChinese ? L"\x8BF7\x6C42\x4E2D..." : _(L"Requesting..."));
+
+    AIConfig config;
+    AIService::LoadConfig(&config);
+
+    wyString requestJson;
+    AIService::BuildErrorAnalysisRequestJson(
+        "",
+        errorText,
+        0,
+        config.model.GetString(),
+        &requestJson);
+
+    ChatMessage* histMsg = new ChatMessage;
+    histMsg->role.SetAs("user");
+    histMsg->content.SetAs(userMsg.GetString());
+    m_history.push_back(histMsg);
+    UpdateHistoryJson();
+
+    StreamThreadParam* param = new StreamThreadParam;
+    param->pthis = this;
+    param->prompt.SetAs(requestJson.GetString());
+    param->systemPrompt.SetAs(AIService::GetPromptErrorAnalysis());
+    param->timeoutMs = (config.error_analysis_timeout_ms > 0)
+        ? (DWORD)config.error_analysis_timeout_ms
+        : 60000;
+
+    if (m_hthread) {
+        CloseHandle(m_hthread);
+        m_hthread = NULL;
+    }
+
+    unsigned threadid;
+    m_hthread = (HANDLE)_beginthreadex(NULL, 0, StreamThreadProc, param, 0, &threadid);
+    if (!m_hthread) {
+        delete param;
+        InterlockedExchange(&m_istreaming, 0);
+        UpdateSendButton();
+        AddMessageToDisplay("error", isChinese ? "\xe5\x90\xaf\xe5\x8a\xa8 AI \xe5\x88\x86\xe6\x9e\x90\xe7\xba\xbf\xe7\xa8\x8b\xe5\xa4\xb1\xe8\xb4\xa5" : _("Failed to start AI analysis thread"));
+        SetWindowText(m_hwndstatus, isChinese ? L"\x53D1\x751F\x9519\x8BEF" : _(L"Error occurred"));
+    }
+}
+
 void TabAI::OnStreamComplete(bool success, const wyChar* error)
 {
+
     InterlockedExchange(&m_istreaming, 0);
     UpdateSendButton();
 
@@ -902,7 +979,13 @@ void TabAI::OnStreamComplete(bool success, const wyChar* error)
 unsigned __stdcall TabAI::StreamThreadProc(void* p)
 {
     StreamThreadParam* param = (StreamThreadParam*)p;
+    if (!param)
+        return 0;
     TabAI* pthis = param->pthis;
+    if (!pthis) {
+        delete param;
+        return 0;
+    }
 
     AIConfig config;
     AIService::LoadConfig(&config);
@@ -914,7 +997,8 @@ unsigned __stdcall TabAI::StreamThreadProc(void* p)
         OnStreamToken,
         pthis,
         &pthis->m_stopstream,
-        &errorBuf
+        &errorBuf,
+        param->timeoutMs
     );
 
     // Post completion message
@@ -924,8 +1008,10 @@ unsigned __stdcall TabAI::StreamThreadProc(void* p)
         perr->SetAs(errorBuf.GetString());
     }
 
-    PostMessage(pthis->m_hwnddisplay, UM_AI_STREAM_COMPLETE,
-                ok ? 1 : 0, (LPARAM)perr);
+    if (pthis) {
+        PostMessage(pthis->m_hwnddisplay, UM_AI_STREAM_COMPLETE,
+                    ok ? 1 : 0, (LPARAM)perr);
+    }
 
     delete param;
     return 0;
@@ -941,8 +1027,10 @@ bool TabAI::OnStreamToken(const wyChar* token, int tokenLen, void* userdata)
     wyString* ptoken = new wyString();
     ptoken->SetAs(token, tokenLen);
 
-    PostMessage(pthis->m_hwnddisplay, UM_AI_STREAM_TOKEN,
-                0, (LPARAM)ptoken);
+    BOOL posted = PostMessage(pthis->m_hwnddisplay, UM_AI_STREAM_TOKEN,
+                              0, (LPARAM)ptoken);
+    if (!posted)
+        delete ptoken;
 
     return true;
 }

@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <map>
 
 class EditorBase;
 
@@ -57,6 +58,10 @@ public:
     int FindTableIndex(const char* name);
 
     int GetCompletionType(const char* text);
+
+    // Get schema summary for AI requests (Chapters 8-10)
+    // Returns formatted string with table/column info
+    void GetSchemaSummary(wyString& summary);
 
     static const int MAX_SUGGESTIONS = 100;
 

@@ -41,6 +41,7 @@ public:
 
     // External call: send SQL to AI from right-click menu
     void    SendSQLToAI(const wyChar* sql, const wyChar* action);
+    void    SendErrorToAI(const wyChar* errorText);
 
     // Clear conversation history
     void    ClearConversation();
@@ -104,6 +105,7 @@ private:
         TabAI*   pthis;
         wyString prompt;
         wyString systemPrompt;
+        DWORD    timeoutMs;
     };
     static unsigned __stdcall StreamThreadProc(void* param);
     static bool OnStreamToken(const wyChar* token, int tokenLen, void* userdata);

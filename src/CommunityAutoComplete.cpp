@@ -1074,3 +1074,45 @@ CCommunityAutoComplete::QueryCompletion(const char* prefix, SQLContextType ctx, 
 
     has_items = (result.GetLength() > 0);
 }
+
+void CCommunityAutoComplete::GetSchemaSummary(wyString& summary)
+{
+    summary.Clear();
+
+    EnterCriticalSection(&m_cs);
+
+    // Add tables and their columns
+    for (size_t t = 0; t < m_tables.size(); t++) {
+        const ACTableInfo& table = m_tables[t];
+
+        // Add table name
+        if (summary.GetLength() > 0)
+            summary.Add("\n");
+        summary.Add("Table: ");
+        summary.Add(table.name);
+
+        // Add columns for this table
+        if (table.field_count > 0) {
+            summary.Add(" (");
+            for (int c = 0; c < table.field_count; c++) {
+                int idx = table.field_start + c;
+                if (idx >= 0 && idx < (int)m_dynamic_items.size()) {
+                    if (c > 0)
+                        summary.Add(", ");
+                    summary.Add(m_dynamic_items[idx].text);
+                }
+            }
+            summary.Add(")");
+        }
+    }
+
+    LeaveCriticalSection(&m_cs);
+
+    // Limit summary length to avoid huge prompts
+    if (summary.GetLength() > 4000) {
+        wyString limited;
+        limited.SetAsDirect(summary.GetString(), 4000);
+        limited.Add("...");
+        summary.SetAs(limited.GetString());
+    }
+}

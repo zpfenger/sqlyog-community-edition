@@ -31,6 +31,9 @@
 #include "EditorFont.h"
 #include "Scintilla.h"
 #include "Include.h"
+#include "TabAI.h"
+#include "TabMgmt.h"
+#include "TabEditor.h"
 
 
 
@@ -151,7 +154,7 @@ TabMessage::CreateQueryMessageEdit(HWND hwndparent, MDIWindow *wnd)
  
 // Function to subclass the messageedit box. It is not used now but it is reserved for later
 // use.
-LRESULT	CALLBACK 
+LRESULT	CALLBACK
 TabMessage::WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
 	TabMessage* pcquerymessageedit = (TabMessage*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
@@ -159,7 +162,14 @@ TabMessage::WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 	switch(message)
 	{
     case WM_COMMAND:
-        pcquerymessageedit->OnWMCommand(wparam);
+        // Handle menu commands
+        if (LOWORD(wparam) == ID_AI_ANALYZE && pcquerymessageedit) {
+            pcquerymessageedit->OnAIAnalyze();
+            return 0;
+        }
+        if (pcquerymessageedit) {
+            pcquerymessageedit->OnWMCommand(wparam);
+        }
         break;
 
     case UM_FOCUS:
@@ -198,13 +208,12 @@ TabMessage::WndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 	    pcquerymessageedit->m_hfont = NULL;
 	    break;
 
-    /*case WM_CONTEXTMENU:
+    case WM_CONTEXTMENU:
         if(pcquerymessageedit->OnContextMenu(lparam) == wyTrue)
         {
             return 0;
         }
-
-        break;*/
+        break;
     }
 
     return CallWindowProc(pcquerymessageedit->m_wporigproc, hwnd, message, wparam, lparam);
@@ -263,6 +272,78 @@ TabMessage::CopyTextToClipBoard()
     str.FindAndReplace("\r\n<n>", "\r\n");
     str.FindAndReplace("\r\n<w>", "\r\n");
     SendMessage(m_hwnd, SCI_COPYTEXT, str.GetLength(), (LPARAM)str.GetString());
+}
+
+void
+TabMessage::OnAIAnalyze()
+{
+    // Get selected text or current line from message editor
+    wyString selectedText;
+
+    int selstart = (int)SendMessage(m_hwnd, SCI_GETSELECTIONSTART, 0, 0);
+    int selend = (int)SendMessage(m_hwnd, SCI_GETSELECTIONEND, 0, 0);
+
+    // If no selection, get current line
+    if (selstart == selend) {
+        int line = (int)SendMessage(m_hwnd, SCI_LINEFROMPOSITION, selstart, 0);
+        selstart = (int)SendMessage(m_hwnd, SCI_POSITIONFROMLINE, line, 0);
+        selend = (int)SendMessage(m_hwnd, SCI_GETLINEENDPOSITION, line, 0);
+    }
+
+    // Get text
+    int len = selend - selstart;
+    if (len > 0 && len < 5000) {
+        char* buf = new char[len + 1];
+        struct TextRange tr;
+        tr.chrg.cpMin = selstart;
+        tr.chrg.cpMax = selend;
+        tr.lpstrText = buf;
+        SendMessage(m_hwnd, SCI_GETTEXTRANGE, 0, (LPARAM)&tr);
+        buf[len] = '\0';
+        selectedText.SetAs(buf);
+        delete[] buf;
+    }
+
+    if (selectedText.GetLength() == 0)
+        return;
+
+    // Remove style tags (single pass)
+    wyString cleanText;
+    cleanText.SetAs(selectedText.GetString());
+    cleanText.FindAndReplace("<r>", "");
+    cleanText.FindAndReplace("</r>", "");
+    cleanText.FindAndReplace("<e>", "");
+    cleanText.FindAndReplace("</e>", "");
+    cleanText.FindAndReplace("<n>", "");
+    cleanText.FindAndReplace("</n>", "");
+    cleanText.FindAndReplace("<w>", "");
+    cleanText.FindAndReplace("</w>", "");
+
+    if (cleanText.GetLength() == 0)
+        return;
+
+    // Find AI Tab and send the text for analysis
+    if (m_pmdi && m_pmdi->m_pctabmodule) {
+        TabEditor* tabEditor = m_pmdi->m_pctabmodule->GetActiveTabEditor();
+        if (tabEditor && tabEditor->m_pctabmgmt) {
+            TabMgmt* tabmgmt = tabEditor->m_pctabmgmt;
+
+            // Switch to AI Tab first
+            wyInt32 aiTabIndex = tabmgmt->SelectFixedTab(IDI_AIASSISTANT);
+            if (aiTabIndex >= 0) {
+                if (!tabmgmt->m_paitab) {
+                    CTCITEM ctci = {0};
+                    ctci.m_mask = CTBIF_IMAGE | CTBIF_LPARAM;
+                    if (CustomTab_GetItem(tabmgmt->m_hwnd, aiTabIndex, &ctci) &&
+                        ctci.m_iimage == IDI_AIASSISTANT) {
+                        tabmgmt->m_paitab = (TabAI*)ctci.m_lparam;
+                    }
+                }
+                if (tabmgmt->m_paitab)
+                    tabmgmt->m_paitab->SendErrorToAI(cleanText.GetString());
+            }
+        }
+    }
 }
 
 void
@@ -337,9 +418,9 @@ TabMessage::OnWMCommand(WPARAM wparam)
 wyBool
 TabMessage::OnContextMenu(LPARAM lparam)
 {
-    HMENU   hmenu, htrackmenu;
+    HMENU   htrackmenu;
 	POINT   pnt;
-	wyInt32 pos;
+	wyInt32 pos, cmd;
     RECT    rect;
 
 	if(lparam == -1)
@@ -359,15 +440,34 @@ TabMessage::OnContextMenu(LPARAM lparam)
     MapWindowPoints(m_hwnd, NULL, (LPPOINT)&rect, 2);
 
     if(!PtInRect(&rect, pnt))
-    {
         return wyFalse;
+
+    // Create popup menu manually
+    htrackmenu = CreatePopupMenu();
+
+    // Set Chinese text based on language
+    const char* langcode = GetL10nLangcode();
+    bool isChinese = (langcode && (strcmp(langcode, "zh-cn") == 0 || strcmp(langcode, "zh") == 0));
+
+    if (isChinese) {
+        AppendMenu(htrackmenu, MF_STRING, ID_MENU_SHOWONLYERRORS, L"\x4EC5\x663E\x793A\x9519\x8BEF");  // 仅显示错误
+        AppendMenu(htrackmenu, MF_SEPARATOR, 0, NULL);
+        AppendMenu(htrackmenu, MF_STRING, ID_AI_ANALYZE, L"AI \x5206\x6790(&A)");  // AI 分析(&A)
+    } else {
+        AppendMenu(htrackmenu, MF_STRING, ID_MENU_SHOWONLYERRORS, L"Show Only Errors");
+        AppendMenu(htrackmenu, MF_SEPARATOR, 0, NULL);
+        AppendMenu(htrackmenu, MF_STRING, ID_AI_ANALYZE, L"AI &Analyze");
     }
 
-    hmenu = LoadMenu(pGlobals->m_hinstance, MAKEINTRESOURCE(IDR_MESSAGETAB_MENU));
-    LocalizeMenu(hmenu);
-    htrackmenu = GetSubMenu(hmenu, 0);
-	TrackPopupMenu(htrackmenu, TPM_LEFTALIGN | TPM_RIGHTBUTTON, pnt.x, pnt.y, 0, m_hwnd, NULL);
-    DestroyMenu(hmenu);
+	cmd = TrackPopupMenu(htrackmenu, TPM_RETURNCMD | TPM_LEFTALIGN | TPM_RIGHTBUTTON,
+                         pnt.x, pnt.y, 0, m_hwnd, NULL);
+    DestroyMenu(htrackmenu);
+
+    if (cmd == ID_AI_ANALYZE)
+        OnAIAnalyze();
+    else if (cmd)
+        OnWMCommand((WPARAM)cmd);
+
     return wyTrue;
 }
 

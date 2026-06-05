@@ -61,6 +61,7 @@
 #include "Http.h"
 #include "htmlayout.h"
 #include "TabCheck.h"
+#include "AIService.h"
 #include "AISettingsDlg.h"
 #include "TabAI.h"
 #include "L10nText.h"
@@ -383,6 +384,9 @@ FrameWindow::Create()
 
 		wyIni::IniGetString("AI", "AIModel", "", &val, path.GetString());
 		pGlobals->m_aimodel.SetAs(val.GetString());
+
+		// Load full AI config into m_aiconfig for code generation and other features
+		AIService::LoadConfig(&pGlobals->m_aiconfig);
 	}
 
 #ifndef COMMUNITY

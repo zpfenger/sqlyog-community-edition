@@ -29,6 +29,14 @@
 #include "Scintilla.h"
 #include "FindAndReplace.h"
 
+// Custom message for SQL generation completion (Chapter 9)
+// wParam: 1 = success, 0 = failure
+// lParam: wyString* with result or error message (caller must delete)
+#define UM_SQL_GEN_COMPLETE  (WM_USER + 370)
+// Posted for each streamed SQL generation token.
+// lParam: wyString* with token text (caller must delete)
+#define UM_SQL_GEN_TOKEN     (WM_USER + 371)
+
 
 #define ISPRINTABLE(X)	((X>=48 && X<=57) || (X>=65 && X<=90) || (X>=186 && X<=192) || (X>=219 && X<=222) || (X==32))
 
@@ -423,6 +431,35 @@ public:
 
     ///Stores whether autocomplete is requested quoted identifier
     wyInt32             m_acwithquotedidentifier;
+
+    // Chapter 9: Comment-to-SQL trigger
+    bool CheckAITrigger(int cursor_pos);
+    void ExtractCommentBlock(int trigger_line, wyString& result);
+    void InsertGeneratedSQL(const char* sql, int trigger_line);
+    void ShowCommentLoadingPlaceholder(int trigger_line);
+    void RemoveCommentLoadingPlaceholder(int trigger_line);
+    void ShowGenerationFailureMessage(int trigger_line, const char* errorMsg);
+
+    // Async SQL generation (Chapter 9)
+    void StartSQLGeneration(const char* comment, const char* schemaInfo, int trigger_line);
+
+private:
+    // Background thread for SQL generation
+    HANDLE              m_gen_thread;
+    volatile LONG       m_gen_thread_running;
+    int                 m_gen_trigger_line;  // Store trigger line for completion handler
+    int                 m_gen_insert_pos;
+    bool                m_gen_has_streamed;
+
+    struct GenThreadParam {
+        EditorBase*     pThis;
+        wyString        requestJson;
+        int             triggerLine;
+        HWND            hwndEditor;  // Editor window handle for posting message
+    };
+    static unsigned __stdcall SQLGenerationThreadProc(void* param);
+    void OnSQLGenerationToken(const char* token);
+    void OnSQLGenerationComplete(const char* result, bool success);
 };
 
 #endif

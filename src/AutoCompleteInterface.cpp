@@ -23,7 +23,10 @@
 #include "AutoCompleteEnt.h"
 #else
 #include "CommunityAutoComplete.h"
+#include "AIService.h"
+#include "Global.h"
 #include "scintilla/Scintilla.h"
+#include <process.h>
 
 namespace {
 
@@ -69,10 +72,12 @@ wyBool ShowCommunityCompletion(CCommunityAutoComplete* ac, HWND hwnd, EditorBase
 
     SendMessage(hwnd, SCI_AUTOCSETTYPESEPARATOR, (WPARAM)'?', 0);
     SendMessage(hwnd, SCI_AUTOCSHOW, prefix_len, (LPARAM)candidates.GetString());
+
     return wyTrue;
 }
 
-}
+} // end anonymous namespace
+
 #endif
 
 AutoCompleteInterface::AutoCompleteInterface()

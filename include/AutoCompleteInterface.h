@@ -20,6 +20,7 @@
 #define _AUTO_COMPLETE_INTERFACE_H_
 #include "MDIWindow.h"
 #include "DataType.h"
+#include "CommunityAutoComplete.h"
 
 class CAutoComplete;
 class CCommunityAutoComplete;

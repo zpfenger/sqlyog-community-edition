@@ -37,5 +37,6 @@ Desktop.ini
 
 .serena/
 .workbuddy/
+.codegraph/
 localization/compile_log.log
 nul
