@@ -62,6 +62,47 @@ bool IsTableContextKeyword(const char* word) {
            strcmp(word, "TABLE") == 0;
 }
 
+// Extract the table name from an UPDATE statement in the given SQL text.
+// Returns the table name in out_table (up to 127 chars), or sets out_table[0] = '\0' if not found.
+void ExtractUpdateTableName(const char* sql_text, char* out_table, int out_size) {
+    out_table[0] = '\0';
+    if (!sql_text || out_size < 2) return;
+
+    int len = (int)strlen(sql_text);
+    char* upper = new char[len + 1];
+    for (int i = 0; i < len; i++)
+        upper[i] = toupper((unsigned char)sql_text[i]);
+    upper[len] = '\0';
+
+    const char* p = upper;
+    while ((p = strstr(p, "UPDATE")) != NULL) {
+        // Check word boundary before
+        if (p > upper && *(p - 1) != ' ' && *(p - 1) != '\t' &&
+            *(p - 1) != '\n' && *(p - 1) != '\r') {
+            p += 6;
+            continue;
+        }
+        // Check word boundary after (not UPDATEd, etc.)
+        if (p[6] != ' ' && p[6] != '\t' && p[6] != '\n' && p[6] != '\r' && p[6] != '\0') {
+            p += 6;
+            continue;
+        }
+
+        const char* src = sql_text + (p - upper) + 6;
+        while (*src == ' ' || *src == '\t') src++;
+
+        int ti = 0;
+        while (*src && *src != ' ' && *src != '\t' && *src != '\n' &&
+               *src != '\r' && *src != ';' && ti < out_size - 1) {
+            out_table[ti++] = *src++;
+        }
+        out_table[ti] = '\0';
+        break;
+    }
+
+    delete[] upper;
+}
+
 bool IsExprContextKeyword(const char* word) {
     return strcmp(word, "WHERE") == 0 ||
            strcmp(word, "ON") == 0 ||
@@ -628,6 +669,13 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
                 prefix.SetAs(after);
             else
                 prefix.Clear();
+            // In UPDATE SET context, resolve table_idx for column completions
+            if (doc_text) {
+                char upd_table[128];
+                ExtractUpdateTableName(doc_text, upd_table, sizeof(upd_table));
+                if (upd_table[0])
+                    table_idx = FindTableIndex(upd_table);
+            }
             delete[] doc_text;
             delete[] line_text;
             return CTX_WHERE_EXPR;
@@ -636,6 +684,13 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
 
     // Character before the word is a comma (e.g. "uid,u" — word="u", char before=',')
     if (word_start > 0 && line_text[word_start - 1] == ',') {
+        // In UPDATE SET context, resolve table_idx for column completions
+        if (doc_text) {
+            char upd_table[128];
+            ExtractUpdateTableName(doc_text, upd_table, sizeof(upd_table));
+            if (upd_table[0])
+                table_idx = FindTableIndex(upd_table);
+        }
         delete[] doc_text;
         delete[] line_text;
         return CTX_WHERE_EXPR;
@@ -680,6 +735,14 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
         }
 
         if (IsExprContextKeyword(prev_word)) {
+            // Special handling for SET in UPDATE statement:
+            // Need to extract the UPDATE target table so column completions work
+            if (strcmp(prev_word, "SET") == 0 && doc_text) {
+                char upd_table[128];
+                ExtractUpdateTableName(doc_text, upd_table, sizeof(upd_table));
+                if (upd_table[0])
+                    table_idx = FindTableIndex(upd_table);
+            }
             delete[] doc_text;
             delete[] line_text;
             return CTX_WHERE_EXPR;
@@ -688,6 +751,13 @@ CCommunityAutoComplete::AnalyzeContext(EditorBase* editor, int cursor_pos,
         // Comma in a list context (e.g. "SELECT col1, " or "col1,col")
         // → column/function completion is appropriate
         if (prev_word[0] == ',' && prev_word[1] == '\0') {
+            // In UPDATE SET context, resolve table_idx for column completions
+            if (doc_text) {
+                char upd_table[128];
+                ExtractUpdateTableName(doc_text, upd_table, sizeof(upd_table));
+                if (upd_table[0])
+                    table_idx = FindTableIndex(upd_table);
+            }
             delete[] doc_text;
             delete[] line_text;
             return CTX_WHERE_EXPR;
@@ -793,8 +863,8 @@ CCommunityAutoComplete::ExtractAliases(const char* sql_text) {
         m_tables[i].alias[0] = '\0';
     m_alias_map.clear();
 
-    const char* keywords[] = {"FROM", "JOIN"};
-    for (int k = 0; k < 2; k++) {
+    const char* keywords[] = {"FROM", "JOIN", "UPDATE"};
+    for (int k = 0; k < 3; k++) {
         const char* search = keywords[k];
         int slen = (int)strlen(search);
         const char* p = upper_buf;
